@@ -29,6 +29,7 @@ Everything is made in code: the sandstone, rangoli, water, people, temple and mu
 | `F` | launch fireworks |
 | `G` | anar / chakri |
 | `R` | float a diya (stand on the lowest ghat step) |
+| `K` | Khel (2D festival games) |
 | `P` | photo mode (hide the HUD) |
 
 It also works on phones, with an on-screen joystick, a run button and pinch to zoom.
@@ -45,6 +46,13 @@ Things get harder as you go:
 Spend your Punya ✦ on swifter hands, desi ghee for longer flames, sevaks who light diyas for you, Agni Chain flames that spread on their own, and new ghats.
 You'll also find seva tasks, achievements, power-ups, golden Lakshmi diyas, the Utsav meter (double Punya), daily prasad streaks, offline earnings from your sevaks, and an **Ashirwad** prestige from night 12.
 Progress saves automatically in your browser.
+
+### 🎮 Khel — 2D festival games
+
+Press `K` or tap 🎮 to open them. The 3D world pauses while you play, so they also run smoothly on phones.
+- **✈️ Pushpak Yatra:** fly the Vimana from Lanka to Ayodhya. Hold to rise, fly through rings of light, collect marigolds (every 20 gives you back a life), and dodge storm clouds and lightning. Every storm night you win unlocks a bonus flight that pays double.
+- **🔔 Sarayu Aarti:** a three-lane rhythm game set to dhol and manjira. Each hit plays the next note of the melody. After every night you win you can perform the Maha Aarti for up to double the night's reward.
+- **🎨 Rangoli:** trace the pattern while every stroke is mirrored 8 ways. Your finished rangoli appears on Ram ki Paidi in the 3D world.
 
 ### ⚡ Deep Dash (competitive mode)
 

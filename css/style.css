@@ -288,3 +288,23 @@ body.touch #dash-panel { padding: 6px 10px; }
 body.touch .aarti-row { font-size: 10.5px; }
 body.touch #aarti-state { min-width: 0; }
 body.touch .aarti-ico { display: none; }
+
+/* ---------- 2D mini-games ---------- */
+#mini { position: fixed; inset: 0; z-index: 40; background: #05030a; touch-action: none; }
+#mini-c { position: absolute; inset: 0; width: 100%; height: 100%; display: block; touch-action: none; }
+.mini-top { position: absolute; top: 0; left: 0; right: 0; display: flex; align-items: center; gap: 12px; padding: 10px 14px; pointer-events: none; }
+.mini-title { font-family: 'Yatra One', serif; color: var(--gold); font-size: 20px; text-shadow: 0 0 12px #ff8a00; }
+.mini-score { flex: 1; text-align: right; font-weight: 700; font-variant-numeric: tabular-nums; color: #ffe8c4; font-size: 16px; }
+.mini-x { pointer-events: auto; background: rgba(0, 0, 0, 0.4); border: 1px solid var(--panel-border); color: var(--text); width: 36px; height: 36px; border-radius: 10px; font-size: 16px; cursor: pointer; }
+.mini-help { position: absolute; left: 50%; top: 58px; transform: translateX(-50%); background: rgba(30, 10, 5, 0.75); border: 1px solid var(--panel-border); border-radius: 12px; padding: 7px 14px; font-size: 14px; opacity: 0; transition: opacity 0.4s; pointer-events: none; text-align: center; max-width: 90vw; }
+.mini-help.show { opacity: 1; }
+.mini-tools { position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%); display: flex; gap: 8px; align-items: center; }
+.mini-tools:empty { display: none; }
+.swatch { width: 34px; height: 34px; border-radius: 50%; border: 2px solid rgba(255, 255, 255, 0.3); cursor: pointer; }
+.swatch.on { border-color: #fff; box-shadow: 0 0 12px #fff; transform: scale(1.12); }
+.mini-result { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: rgba(5, 2, 4, 0.55); padding: 12px; }
+.grade { font-size: 64px; font-family: 'Yatra One', serif; }
+.grade.gS { color: #fff2a8; text-shadow: 0 0 24px #ffb300; } .grade.gA { color: #ffd36b; } .grade.gB { color: #9fe7ff; } .grade.gC, .grade.gD { color: #c9a; }
+.btn.bonus { background: linear-gradient(180deg, #ffe08a, #d4a017); color: #3a1a00; border-color: #fff1b0; }
+body.touch .act#act-khel em { display: none; }
+@media (max-width: 760px) { #actions { width: 172px; } }

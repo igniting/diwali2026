@@ -10,6 +10,7 @@ import { Player, Sevak, Monkey, buildCrowd } from './characters.js';
 import { Effects } from './fx.js';
 import { AudioEngine } from './audio.js';
 import { PowerUps, POWERUPS } from './powerups.js';
+import { MiniGames, GAMES } from './minigames.js';
 
 const $ = (id) => document.getElementById(id);
 const SAVE_KEY = 'ayodhya-deepotsav-v1';
@@ -69,6 +70,9 @@ const ACHIEVEMENTS = [
   ['ashirwad', '🙏', 'Ashirwad', 'Receive the blessings of Shri Ram (prestige)', (s) => s.prestiges >= 1, 0],
   ['hour', '⏳', 'Sachcha Bhakt', 'Play for one hour', (s) => s.playTime >= 3600, 10000],
   ['power20', '✨', 'Shakti', 'Grab 20 power-ups', (s) => s.powerups >= 20, 3000],
+  ['yatraWin', '✈️', 'Ayodhya Aagaman', 'Land the Pushpak Vimana in Ayodhya', (s) => (s.mini.yatraWins || 0) >= 1, 2000],
+  ['aartiS', '🔔', 'Sur Samrat', 'Get an S grade in the Sarayu Aarti', (s) => (s.mini.aartiS || 0) >= 1, 5000],
+  ['rangoli90', '🎨', 'Kalakar', 'Score 90% on a rangoli', (s) => (s.mini.rangoliPct || 0) >= 90, 3000],
   ['streak5', '🔥', 'Lagataar', 'Win 5 nights in a row', (s) => (s.bestStreak || 0) >= 5, 3000],
   ['streak15', '☄️', 'Ajeya', 'Win 15 nights in a row', (s) => (s.bestStreak || 0) >= 15, 60000],
   ['storm', '⛈️', 'Aandhi Vijay', 'Win a storm night', (s) => (s.storms || 0) >= 1, 5000],
@@ -110,6 +114,7 @@ function freshState() {
     nightStars: {}, playTime: 0, quests: [], questLevel: 0, lastDay: '', streak: 0, lastSave: Date.now(), tutorial: 0,
     settings: { music: 0.6, sfx: 0.9, quality: null, name: '' },
     powerups: 0,
+    mini: { yatra: 0, aarti: 0, rangoli: 0, yatraWins: 0, aartiS: 0, rangoliPct: 0, day: '', played: {}, aartiNight: 0, yatraNight: 0 },
     dash: { best: 0, played: 0, ladder: 0, wins: 0, runs: [], shared: 0, challengesWon: 0, day: '', dayBest: 0 },
   };
 }
@@ -119,7 +124,7 @@ try {
   if (raw) {
     const loaded = JSON.parse(raw);
     const f = freshState();
-    S = { ...f, ...loaded, up: { ...f.up, ...(loaded.up || {}) }, settings: { ...f.settings, ...(loaded.settings || {}) }, dash: { ...f.dash, ...(loaded.dash || {}) } };
+    S = { ...f, ...loaded, up: { ...f.up, ...(loaded.up || {}) }, settings: { ...f.settings, ...(loaded.settings || {}) }, dash: { ...f.dash, ...(loaded.dash || {}) }, mini: { ...f.mini, ...(loaded.mini || {}) } };
   }
 } catch (e) { /* storage unavailable */ }
 const hadSave = S.totalLit > 0;
@@ -165,6 +170,7 @@ fx.setPixelRatio(pr);
 const monkeys = [new Monkey(scene), new Monkey(scene), new Monkey(scene)];
 const monkey = monkeys[0]; // Deep Dash uses a single vanar
 const powerups = new PowerUps(scene);
+const mini = new MiniGames(audio);
 let sevaks = [];
 let frameNo = 0;
 
@@ -505,6 +511,12 @@ function showSummary(won) {
       <div>Punya earned tonight</div><div>${fmt(G.nightPunya)} ✦</div>
     </div>
     <div class="note">Tip: sweep the rows in loops and relight dimming diyas before they die. Ghee and sevaks help you hold. Next try: goal −${Math.min(3, S.mercy.fails) * 7}%.</div>`;
+  const showAarti = won && S.mini.aartiNight !== n;
+  const showYatra = won && G.storm && S.mini.yatraNight !== n;
+  $('btn-aarti').classList.toggle('hidden', !showAarti);
+  $('btn-yatra').classList.toggle('hidden', !showYatra);
+  $('btn-aarti').onclick = () => playMini('aarti', { night: n, nightReward: G.reward, fromSummary: true });
+  $('btn-yatra').onclick = () => playMini('yatra', { night: n, storm: true, fromSummary: true });
   $('btn-next').textContent = won ? `Night ${n + 1} ➜` : 'Try Again ↻';
   $('btn-next').onclick = () => {
     $('summary').classList.add('hidden');
@@ -621,6 +633,14 @@ function renderShop() {
       teleport(0); startNight(1);
       audio.aarti(); checkAchievements();
     };
+  } else if (shopTab === 'khel') {
+    body.innerHTML = '<div class="grid">' + Object.entries(GAMES).map(([id, g]) => `
+      <div class="card"><div class="ic">${g.icon}</div>
+        <div class="info"><div class="nm">${g.name}<small>${g.hindi}</small></div><div class="ds">${g.desc}</div>
+        <div class="lv">Best ${fmt(S.mini[id] || 0)}${S.mini.day === todayKey() && S.mini.played[id] ? '' : ' · 🎁 first play today pays double'}</div></div>
+        <button class="btn primary buy" data-game="${id}">Play</button></div>`).join('') + `</div>
+      <div class="note">🔔 After every night you win, you can perform the Maha Aarti for up to double the night's reward. ⛈️ Storm nights unlock a bonus Pushpak Yatra.</div>`;
+    body.querySelectorAll('[data-game]').forEach((b) => (b.onclick = () => playMini(b.dataset.game, {})));
   } else if (shopTab === 'compete') {
     const runs = S.dash.runs;
     const rv = RIVALS[Math.min(S.dash.ladder, RIVALS.length - 1)];
@@ -846,6 +866,84 @@ function updateEvents(dt) {
   }
   if (G.lakshmiT > 0) G.lakshmiT -= dt;
 }
+
+// ---------------------------------------------------------------- 2D mini-games
+function miniFactor() { return 1 + 0.25 * (S.bestNight - 1) * (1 + 0.1 * S.ashirwad); }
+function playMini(id, ctx) {
+  if (G.phase === 'dash') return;
+  audio.init();
+  const summaryOpen = !$('summary').classList.contains('hidden');
+  ['shop', 'summary'].forEach((x) => $(x).classList.add('hidden'));
+  G.paused = true;
+  const firstToday = !(S.mini.day === todayKey() && S.mini.played[id]);
+  mini.open(id, {
+    best: S.mini[id] || 0,
+    rewardFor: (r) => {
+      let punya = 0, text = '';
+      if (id === 'aarti' && ctx.fromSummary) {
+        punya = Math.round(ctx.nightReward * r.acc);
+        text = `+${fmt(punya)} ✦ (Aarti bonus ${Math.round(r.acc * 100)}%)`;
+      } else {
+        const base = id === 'yatra' ? 0.15 : id === 'aarti' ? 0.05 : 0.02;
+        punya = Math.round(r.score * base * miniFactor() * (firstToday ? 2 : 1) * (ctx.storm ? 2 : 1));
+        text = `+${fmt(punya)} ✦${firstToday ? ' (daily x2)' : ''}${ctx.storm ? ' (storm x2)' : ''}`;
+      }
+      return { punya, text };
+    },
+    onFinish: (r) => {
+      S.punya += r.reward; S.lifetime += r.reward;
+      S.mini[id] = Math.max(S.mini[id] || 0, r.score);
+      if (S.mini.day !== todayKey()) { S.mini.day = todayKey(); S.mini.played = {}; }
+      S.mini.played[id] = true;
+      if (id === 'yatra' && r.won) S.mini.yatraWins = (S.mini.yatraWins || 0) + 1;
+      if (id === 'aarti' && r.acc >= 0.95) S.mini.aartiS = (S.mini.aartiS || 0) + 1;
+      if (id === 'rangoli') { S.mini.rangoliPct = Math.max(S.mini.rangoliPct || 0, r.pct); placeRangoli(r.art, true); }
+      if (ctx.fromSummary && id === 'aarti') S.mini.aartiNight = ctx.night;
+      if (ctx.fromSummary && id === 'yatra') S.mini.yatraNight = ctx.night;
+      checkAchievements();
+      save();
+    },
+    onQuit: () => { if (ctx.fromSummary && id === 'aarti') S.mini.aartiNight = ctx.night; },
+    onClose: () => {
+      if (summaryOpen) { showSummaryButtonsRefresh(); $('summary').classList.remove('hidden'); }
+      G.paused = isModalOpen();
+      clock.getDelta();
+    },
+  });
+}
+function showSummaryButtonsRefresh() {
+  if (S.mini.aartiNight === S.night) $('btn-aarti').classList.add('hidden');
+  if (S.mini.yatraNight === S.night) $('btn-yatra').classList.add('hidden');
+}
+let rangoliMesh = null;
+function placeRangoli(art, persist) {
+  const c = document.createElement('canvas');
+  c.width = c.height = 512;
+  c.getContext('2d').drawImage(art, 0, 0, 512, 512);
+  if (persist) {
+    try {
+      const small = document.createElement('canvas'); small.width = small.height = 256;
+      small.getContext('2d').drawImage(c, 0, 0, 256, 256);
+      localStorage.setItem(SAVE_KEY + '-rangoli', small.toDataURL('image/png'));
+    } catch (e) { /* storage full or unavailable */ }
+  }
+  const tex = new THREE.CanvasTexture(c);
+  tex.colorSpace = THREE.SRGBColorSpace;
+  if (!rangoliMesh) {
+    rangoliMesh = new THREE.Mesh(new THREE.PlaneGeometry(4.6, 4.6), new THREE.MeshStandardMaterial({ map: tex, transparent: true, roughness: 0.95, polygonOffset: true, polygonOffsetFactor: -4 }));
+    rangoliMesh.rotation.x = -Math.PI / 2;
+    rangoliMesh.position.set(0, TOP_Y + 0.02, 15.2);
+    scene.add(rangoliMesh);
+  } else {
+    rangoliMesh.material.map.dispose();
+    rangoliMesh.material.map = tex;
+    rangoliMesh.material.needsUpdate = true;
+  }
+}
+try {
+  const saved = localStorage.getItem(SAVE_KEY + '-rangoli');
+  if (saved) { const img = new Image(); img.onload = () => placeRangoli(img, false); img.src = saved; }
+} catch (e) { /* ignore */ }
 
 // ---------------------------------------------------------------- power-ups (both modes)
 function applyPowerUp(p) {
@@ -1191,6 +1289,7 @@ const keys = {};
 const input = { x: 0, z: 0, sprint: false };
 addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
+  if (mini.active) return;
   keys[e.code] = true;
   if (G.phase === 'title') return;
   if (G.phase === 'dash' || G.phase === 'dashover') {
@@ -1206,6 +1305,7 @@ addEventListener('keydown', (e) => {
   if (e.code === 'KeyF') actRocket();
   if (e.code === 'KeyG') actAnar();
   if (e.code === 'KeyR') actFloat();
+  if (e.code === 'KeyK') openShop('khel');
   if (e.code === 'KeyP') { G.photo = !G.photo; document.body.classList.toggle('photo', G.photo); }
   if (e.code === 'Space' && G.phase === 'won' && G.wonT > 4) { G.wonT = 99; }
 });
@@ -1263,6 +1363,7 @@ $('act-rocket').onclick = actRocket;
 $('act-anar').onclick = actAnar;
 $('act-float').onclick = actFloat;
 $('act-shop').onclick = () => openShop();
+$('act-khel').onclick = () => openShop('khel');
 $('btn-menu').onclick = () => openShop('settings');
 $('shop-close').onclick = closeShop;
 $('btn-shop2').onclick = () => { $('summary').classList.add('hidden'); openShop('upgrades'); G.reopenSummary = true; };
@@ -1413,6 +1514,7 @@ function cullSevaks() {
 }
 function frame() {
   requestAnimationFrame(frame);
+  if (mini.active) { clock.getDelta(); return; } // the 3D world sleeps during 2D mini-games
   frameNo++;
   const raw = clock.getDelta();
   adaptResolution(raw);
@@ -1588,4 +1690,4 @@ $('loading').classList.add('hidden');
 $('title').classList.remove('hidden');
 frame();
 // debugging handle (used by automated screenshots)
-window.__deepotsav = { G, D, get S() { return S; }, player, diyas, fx, camera, begin, world, startDash, powerups };
+window.__deepotsav = { G, D, mini, playMini, get S() { return S; }, player, diyas, fx, camera, begin, world, startDash, powerups };
