@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Ayodhya Deepotsav</title>
+<meta name="description" content="A 3D Diwali game: light lakhs of diyas on the ghats of the Sarayu and welcome Shri Ram home to Ayodhya.">
+<meta name="theme-color" content="#120806">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🪔</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Yatra+One&family=Poppins:wght@400;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/style.css">
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<!-- Loading -->
+<div id="loading" class="screen">
+  <div class="diya-loader">🪔</div>
+  <div class="loading-text">Preparing Ayodhya for Deepotsav…</div>
+</div>
+
+<!-- Title screen -->
+<div id="title" class="screen hidden">
+  <div class="title-card">
+    <div class="om">ॐ</div>
+    <h1><span class="hi">अयोध्या दीपोत्सव</span><span class="en">Ayodhya Deepotsav</span></h1>
+    <p class="story">After fourteen years of exile and victory over Ravana, <b>Shri Ram</b>, <b>Sita</b> and <b>Lakshman</b> are returning home on the Pushpak Vimana.
+      On this moonless Amavasya night, the people of Ayodhya light rows of diyas along the Sarayu so the Vimana can find its way.
+      Light the ghats, guard the flames from wind and mischievous vanars, and make this the brightest Deepotsav ever.</p>
+    <div class="title-buttons">
+      <button id="btn-play" class="btn primary big">🪔 Begin Deepotsav</button>
+    </div>
+    <div id="continue-info" class="continue-info"></div>
+    <div class="controls-help">
+      <div><kbd>W A S D</kbd> walk · <kbd>Shift</kbd> run · drag mouse to look · scroll to zoom</div>
+      <div>Your puja thali lights every diya you pass. <kbd>B</kbd> Bazaar · <kbd>F</kbd> fireworks · <kbd>G</kbd> anar · <kbd>R</kbd> float a diya · <kbd>P</kbd> photo mode</div>
+    </div>
+    <div class="quality-row">Graphics:
+      <select id="quality-select">
+        <option value="high">High</option>
+        <option value="medium">Medium</option>
+        <option value="low">Low (mobile)</option>
+      </select>
+    </div>
+  </div>
+</div>
+
+<!-- HUD -->
+<div id="hud" class="hidden">
+  <div id="hud-night" class="panel">
+    <div class="night-row"><span id="night-label">Night 1</span><span id="night-timer">3:00</span></div>
+    <div class="bar"><div id="target-fill"></div><div id="target-mark"></div></div>
+    <div class="night-sub"><span id="lit-count">0</span> lit · goal <b id="target-count">60</b></div>
+    <div id="zone-hint" class="zone-hint"></div>
+  </div>
+  <div id="hud-punya" class="panel">
+    <div class="punya"><span class="ico">✦</span><span id="punya">0</span></div>
+    <div class="persec" id="persec">+0 /s</div>
+    <div class="boosts" id="boosts"></div>
+  </div>
+  <div id="combo" class="combo hidden"></div>
+  <div id="quests" class="panel"></div>
+  <div id="utsav" class="panel">
+    <div class="utsav-label">उत्सव Utsav</div>
+    <div class="bar"><div id="utsav-fill"></div></div>
+  </div>
+  <div id="stamina"><div id="stamina-fill"></div></div>
+  <div id="banner" class="banner"></div>
+  <div id="toasts"></div>
+  <div id="arrow" class="arrow hidden">➤<span id="arrow-dist"></span></div>
+  <div id="popups"></div>
+  <div id="actions">
+    <button class="act" id="act-float" title="Float a diya on the Sarayu (R)"><span>🪷</span><small>R</small><em id="cost-float"></em></button>
+    <button class="act" id="act-anar" title="Light an anar fountain (G)"><span>🎇</span><small>G</small><em id="cost-anar"></em></button>
+    <button class="act" id="act-rocket" title="Launch fireworks (F)"><span>🎆</span><small>F</small><em id="cost-rocket"></em></button>
+    <button class="act shop" id="act-shop" title="Bazaar (B)"><span>🛕</span><small>B</small><em>Bazaar</em></button>
+  </div>
+  <button id="btn-menu" class="corner-btn" title="Menu (Esc)">☰</button>
+  <div id="joystick"><div id="stick"></div></div>
+  <button id="btn-run" class="mobile-only">🏃</button>
+</div>
+
+<!-- Bazaar / menu -->
+<div id="shop" class="modal hidden">
+  <div class="modal-card wide">
+    <div class="modal-head">
+      <div class="tabs">
+        <button data-tab="upgrades" class="tab active">Upgrades</button>
+        <button data-tab="zones" class="tab">Ghats &amp; Zones</button>
+        <button data-tab="ashirwad" class="tab">Ashirwad</button>
+        <button data-tab="achievements" class="tab">Achievements</button>
+        <button data-tab="settings" class="tab">Stats &amp; Settings</button>
+      </div>
+      <div class="shop-punya">✦ <span id="shop-punya">0</span></div>
+      <button class="close" id="shop-close">✕</button>
+    </div>
+    <div class="modal-body" id="shop-body"></div>
+  </div>
+</div>
+
+<!-- Night summary -->
+<div id="summary" class="modal hidden">
+  <div class="modal-card">
+    <div id="summary-body"></div>
+    <div class="summary-buttons">
+      <button id="btn-shop2" class="btn">🛕 Bazaar</button>
+      <button id="btn-next" class="btn primary">Next Night ➜</button>
+    </div>
+  </div>
+</div>
+
+<!-- Generic message -->
+<div id="message" class="modal hidden">
+  <div class="modal-card">
+    <div id="message-body"></div>
+    <div class="summary-buttons"><button id="message-ok" class="btn primary">Jai Shri Ram 🙏</button></div>
+  </div>
+</div>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
