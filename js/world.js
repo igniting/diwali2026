@@ -517,7 +517,7 @@ export function buildWorld(scene, quality) {
 
   // ---- Water: Sarayu ----
   const waterGeo = new THREE.PlaneGeometry(1800, 480);
-  const reflRes = quality === 'high' ? 1024 : 512;
+  const reflRes = quality === 'high' ? 1024 : quality === 'medium' ? 512 : 256;
   const water = new Water(waterGeo, {
     textureWidth: reflRes, textureHeight: reflRes,
     waterNormals: TX.waterNormalTexture(256),

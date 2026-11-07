@@ -168,10 +168,12 @@ export class Player {
 // ---------------------------------------------------------------- Sevaks (helpers)
 const SEVAK_CLOTHES = [0xff7a00, 0xffd000, 0xe63946, 0xff9f1c, 0xf4a261, 0xffffff];
 export class Sevak {
-  constructor(scene, world, diyas, zone, idx) {
+  constructor(scene, world, diyas, zone, idx, opts = {}) {
     this.world = world; this.diyas = diyas; this.zone = zone;
+    this.source = opts.source || 'sevak';
+    this.range = opts.range || null; // [start, count] overrides the zone
     const female = idx % 3 === 1;
-    this.mesh = makePerson({ cloth: SEVAK_CLOTHES[idx % SEVAK_CLOTHES.length], lower: female ? [0xd62828, 0x6a0dad, 0x0077b6, 0x2a9d8f][idx % 4] : 0xf8f4ea, skin: [0x8d5a3b, 0x6e4529, 0xa86f4c][idx % 3], female, thali: true, scale: 0.97 + Math.random() * 0.06 });
+    this.mesh = makePerson({ cloth: opts.cloth || SEVAK_CLOTHES[idx % SEVAK_CLOTHES.length], lower: female ? [0xd62828, 0x6a0dad, 0x0077b6, 0x2a9d8f][idx % 4] : 0xf8f4ea, skin: [0x8d5a3b, 0x6e4529, 0xa86f4c][idx % 3], female, thali: true, scale: 0.97 + Math.random() * 0.06 });
     scene.add(this.mesh);
     this.pos = new THREE.Vector3();
     this.target = -1;
@@ -183,14 +185,19 @@ export class Sevak {
   }
   placeInZone() {
     const d = this.diyas;
-    const i = d.zoneStart[this.zone] + ((Math.random() * d.zoneCount[this.zone]) | 0);
+    const [s0, n0] = this.span();
+    const i = s0 + ((Math.random() * n0) | 0);
     let x = d.pos[i * 3], z = d.pos[i * 3 + 2];
     if (!this.world.isFree(x, z)) { x = 0; z = 16; }
     this.pos.set(x, this.world.heightAt(x, z), z);
   }
+  span() { return this.range || [this.diyas.zoneStart[this.zone], this.diyas.zoneCount[this.zone]]; }
   pickTarget() {
     const d = this.diyas;
-    const s = d.zoneStart[this.zone], n = d.zoneCount[this.zone];
+    const [s, n] = this.span();
+    // prefer an unlit diya close by, so helpers sweep along the rows
+    const near = d.findTarget(this.pos.x, this.pos.z, 7, this.pos.y);
+    if (near >= 0 && near >= s && near < s + n && !d.lit[near]) { this.target = near; return; }
     let best = -1, bd = Infinity;
     const low = d.burnTime * 0.3;
     for (let k = 0; k < 14; k++) {
@@ -229,14 +236,16 @@ export class Sevak {
     while (this.budget >= 1) {
       const i = d.findTarget(this.pos.x, this.pos.z, reach, this.pos.y);
       if (i < 0) break;
-      d.light(i, 'sevak');
+      d.light(i, this.source);
       this.budget -= 1;
     }
     this.speed += ((moving ? speed : 0) - this.speed) * Math.min(1, dt * 8);
     this.pos.y += (this.world.heightAt(this.pos.x, this.pos.z) - this.pos.y) * Math.min(1, dt * 12);
-    this.mesh.position.copy(this.pos);
-    this.mesh.rotation.y = this.heading;
-    animateWalk(this.mesh, this.speed, dt);
+    if (this.mesh.visible) {
+      this.mesh.position.copy(this.pos);
+      this.mesh.rotation.y = this.heading;
+      animateWalk(this.mesh, this.speed, dt);
+    }
   }
   dispose(scene) { scene.remove(this.mesh); }
 }

@@ -39,6 +39,16 @@ Spend your Punya ✦ on swifter hands, desi ghee for longer flames, sevaks who l
 You'll also find seva tasks, 30 achievements, golden Lakshmi diyas, the Utsav meter (double Punya), daily prasad streaks, offline earnings from your sevaks, and an **Ashirwad** prestige from night 12.
 Progress saves automatically in your browser.
 
+### ⚡ Deep Dash (competitive mode)
+
+Deep Dash is a 90-second race on the three ghats, and everyone gets the same stats.
+Each race is against a rival who lights diyas alongside you. Beat each one to climb a 7-rung ladder, from Nishad Raj up to Hanuman.
+- **Power-ups:** 🔥 Agni Blast, ⚡ Pavan Veg, 🪔 Lambi Jyoti, ✖️2 Dugna and ⏳ Samay.
+- **Hazards:** vanars and wind gusts that break your combo. Their timing comes from that day's seed, so everyone faces the same ones.
+- **Medals:** Kansya, Rajat, Swarna, Heera and Deepak Samrat. Your personal best and top-10 runs are recorded.
+- **Challenge friends:** share a link like `?c=<score>&n=<name>&d=<seed>`. Your friend then races a rival with your name and score, on the same seed.
+- **Rewards:** each race earns Punya for the main game, doubled on your first race of the day.
+
 ## Hosting on GitHub Pages
 
 A GitHub Actions workflow (`.github/workflows/pages.yml`) publishes the site on every push to `main`.

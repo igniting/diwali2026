@@ -9,6 +9,7 @@ import { DiyaSystem, ZONES } from './diyas.js';
 import { Player, Sevak, Monkey, buildCrowd } from './characters.js';
 import { Effects } from './fx.js';
 import { AudioEngine } from './audio.js';
+import { PowerUps, POWERUPS } from './powerups.js';
 
 const $ = (id) => document.getElementById(id);
 const SAVE_KEY = 'ayodhya-deepotsav-v1';
@@ -67,7 +68,34 @@ const ACHIEVEMENTS = [
   ['crore', '💰', 'Crorepati', 'Earn 1 crore Punya in total', (s) => s.lifetime >= 1e7, 500000],
   ['ashirwad', '🙏', 'Ashirwad', 'Receive the blessings of Shri Ram (prestige)', (s) => s.prestiges >= 1, 0],
   ['hour', '⏳', 'Sachcha Bhakt', 'Play for one hour', (s) => s.playTime >= 3600, 10000],
+  ['power20', '✨', 'Shakti', 'Grab 20 power-ups', (s) => s.powerups >= 20, 3000],
+  ['dash1', '⚡', 'Deep Dash', 'Finish your first Deep Dash', (s) => s.dash.played >= 1, 500],
+  ['dashSilver', '🥈', 'Rajat Deep', 'Score 7,000 in Deep Dash', (s) => s.dash.best >= 7000, 2000],
+  ['dashGold', '🥇', 'Swarna Deep', 'Score 12,000 in Deep Dash', (s) => s.dash.best >= 12000, 6000],
+  ['dashDiamond', '💎', 'Heera Deep', 'Score 18,000 in Deep Dash', (s) => s.dash.best >= 18000, 20000],
+  ['dashKing', '👑', 'Deepak Samrat', 'Score 26,000 in Deep Dash', (s) => s.dash.best >= 26000, 80000],
+  ['ladder3', '🏹', 'Rival Slayer', 'Defeat 3 rivals on the Deep Dash ladder', (s) => s.dash.ladder >= 3, 8000],
+  ['ladderAll', '🏆', 'Ayodhya Champion', 'Defeat every rival on the ladder', (s) => s.dash.ladder >= RIVALS.length, 150000],
+  ['challenge', '📨', 'Chunauti', 'Send a Deep Dash challenge to a friend', (s) => s.dash.shared >= 1, 1000],
+  ['challengeWin', '🤝', 'Mitra Vijay', 'Beat a friend’s challenge score', (s) => s.dash.challengesWon >= 1, 5000],
 ];
+
+// Deep Dash: 90-second arcade sprint against a ladder of rivals
+const RIVALS = [
+  { name: 'Nishad Raj', target: 4500, cloth: 0x2a9d8f },
+  { name: 'Angad', target: 6500, cloth: 0x3a86ff },
+  { name: 'Shatrughan', target: 9000, cloth: 0x8338ec },
+  { name: 'Sugriv', target: 12000, cloth: 0x06d6a0 },
+  { name: 'Jambavan', target: 15500, cloth: 0x118ab2 },
+  { name: 'Bharat', target: 19500, cloth: 0x4361ee },
+  { name: 'Hanuman', target: 25000, cloth: 0xe85d04 },
+];
+const MEDALS = [
+  [26000, '👑', 'Deepak Samrat'], [18000, '💎', 'Heera'], [12000, '🥇', 'Swarna'], [7000, '🥈', 'Rajat'], [3000, '🥉', 'Kansya'],
+];
+const medalFor = (score) => MEDALS.find((m) => score >= m[0]) || null;
+const nextMedal = (score) => [...MEDALS].reverse().find((m) => score < m[0]) || null;
+const DASH_TIME = 90;
 
 function freshState() {
   return {
@@ -76,7 +104,9 @@ function freshState() {
     ashirwad: 0, ashirwadEarned: 0, prestiges: 0,
     ach: {}, rockets: 0, floated: 0, anars: 0, monkeys: 0, goldens: 0, maxCombo: 0, maxHeld: 0, utsavs: 0, threeStars: 0,
     nightStars: {}, playTime: 0, quests: [], questLevel: 0, lastDay: '', streak: 0, lastSave: Date.now(), tutorial: 0,
-    settings: { music: 0.6, sfx: 0.9, quality: null },
+    settings: { music: 0.6, sfx: 0.9, quality: null, name: '' },
+    powerups: 0,
+    dash: { best: 0, played: 0, ladder: 0, wins: 0, runs: [], shared: 0, challengesWon: 0, day: '', dayBest: 0 },
   };
 }
 let S = freshState();
@@ -84,7 +114,8 @@ try {
   const raw = localStorage.getItem(SAVE_KEY);
   if (raw) {
     const loaded = JSON.parse(raw);
-    S = { ...freshState(), ...loaded, up: { ...freshState().up, ...(loaded.up || {}) }, settings: { ...freshState().settings, ...(loaded.settings || {}) } };
+    const f = freshState();
+    S = { ...f, ...loaded, up: { ...f.up, ...(loaded.up || {}) }, settings: { ...f.settings, ...(loaded.settings || {}) }, dash: { ...f.dash, ...(loaded.dash || {}) } };
   }
 } catch (e) { /* storage unavailable */ }
 const hadSave = S.totalLit > 0;
@@ -96,12 +127,21 @@ function save() {
 // ---------------------------------------------------------------- renderer & scene
 const isTouch = matchMedia('(pointer: coarse)').matches || 'ontouchstart' in window;
 if (isTouch) document.body.classList.add('touch');
+// Stop the browser's long-press / double-tap behaviours (text-selection popups, callouts, zoom)
+// everywhere except real controls and scrollable menus.
+document.addEventListener('touchstart', (e) => {
+  if (!e.target.closest('button, input, select, label, a, .modal-card, .title-card')) e.preventDefault();
+}, { passive: false });
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('dblclick', (e) => e.preventDefault());
+document.addEventListener('contextmenu', (e) => { if (!e.target.closest('input')) e.preventDefault(); });
+document.addEventListener('selectstart', (e) => { if (!e.target.closest('input')) e.preventDefault(); });
 const quality = S.settings.quality || (isTouch ? 'low' : 'high');
 $('quality-select').value = quality;
 
 const canvas = $('c');
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: quality === 'high', powerPreference: 'high-performance' });
-const pr = quality === 'high' ? Math.min(devicePixelRatio, 1.75) : quality === 'medium' ? Math.min(devicePixelRatio, 1.25) : Math.min(devicePixelRatio, 1) * 0.85;
+let pr = quality === 'high' ? Math.min(devicePixelRatio, 1.75) : quality === 'medium' ? Math.min(devicePixelRatio, 1.25) : Math.min(devicePixelRatio, 1) * 0.85;
 renderer.setPixelRatio(pr);
 renderer.setSize(innerWidth, innerHeight);
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
@@ -119,12 +159,16 @@ const audio = new AudioEngine();
 const fx = new Effects(scene, audio, camera);
 fx.setPixelRatio(pr);
 const monkey = new Monkey(scene);
+const powerups = new PowerUps(scene);
 let sevaks = [];
+let frameNo = 0;
 
 // reflections skip small things for speed
 const hideInMirror = [diyas.bowls, diyas.glows, ...crowd, ...world.mirrorHidden, fx.dust.points, fx.petals.points, fx.donas];
 const origWaterBR = world.water.onBeforeRender;
 world.water.onBeforeRender = function (...args) {
+  // on low quality the reflection is refreshed every other frame
+  if (quality === 'low' && (frameNo & 1)) return;
   const vis = hideInMirror.map((o) => o.visible);
   hideInMirror.forEach((o) => (o.visible = false));
   origWaterBR.apply(this, args);
@@ -137,6 +181,27 @@ const bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), qu
 composer.addPass(bloom);
 composer.addPass(new OutputPass());
 
+// adaptive resolution: keep the frame rate smooth by trading pixels when the device struggles
+const PR_MAX = pr, PR_MIN = quality === 'high' ? 0.7 : 0.5;
+const perf = { frames: 0, acc: 0, good: 0 };
+function setPixelRatioAll(v) {
+  pr = v;
+  renderer.setPixelRatio(v);
+  composer.setPixelRatio(v);
+  world.setPixelRatio(v);
+  fx.setPixelRatio(v);
+}
+function adaptResolution(rawDt) {
+  if (rawDt > 0.5) return; // tab was hidden
+  perf.frames++; perf.acc += rawDt;
+  if (perf.acc < 2) return;
+  const fps = perf.frames / perf.acc;
+  perf.frames = 0; perf.acc = 0;
+  if (fps < 45 && pr > PR_MIN + 0.01) { setPixelRatioAll(Math.max(PR_MIN, pr * 0.85)); perf.good = 0; }
+  else if (fps > 57) { if (++perf.good >= 3 && pr < PR_MAX - 0.01) { setPixelRatioAll(Math.min(PR_MAX, pr * 1.1)); perf.good = 0; } }
+  else perf.good = 0;
+}
+
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
   camera.updateProjectionMatrix();
@@ -147,7 +212,7 @@ addEventListener('resize', () => {
 // ---------------------------------------------------------------- derived stats
 const up = () => S.up;
 function multiplier() {
-  return (1 + 0.25 * up().bhajan) * (1 + 0.1 * S.ashirwad) * (G.utsavT > 0 ? 2 : 1) * (G.lakshmiT > 0 ? 3 : 1);
+  return (1 + 0.25 * up().bhajan) * (1 + 0.1 * S.ashirwad) * (G.utsavT > 0 ? 2 : 1) * (G.lakshmiT > 0 ? 3 : 1) * (G.doubleT > 0 ? 2 : 1);
 }
 function incomeRate() { return (diyas.litCount * 0.1 + G.floating * 0.6) * multiplier(); }
 function applyStats() {
@@ -191,6 +256,7 @@ const G = {
   windVec: new THREE.Vector3(), paused: false, photo: false, time: 0,
   cam: { yaw: 0, pitch: 0.42, dist: 9, look: new THREE.Vector3() },
   ambientRocket: 8,
+  speedT: 0, magnetT: 0, doubleT: 0, nextPower: 25, sevakCullT: 0,
 };
 
 function addPunya(v) {
@@ -200,10 +266,12 @@ function addPunya(v) {
 
 // ---------------------------------------------------------------- lighting callback
 diyas.onLit = (i, source, isNew) => {
+  if (G.phase === 'dash') { dashOnLit(i, source, isNew); return; }
   const mult = multiplier();
   if (source === 'player') {
     if (G.time - G.lastLightT < 1.5) G.combo++; else G.combo = 1;
     G.lastLightT = G.time;
+    comboCallout(G.combo);
     S.maxCombo = Math.max(S.maxCombo, G.combo);
     questProgress('combo', G.combo, false);
     const cm = comboMult();
@@ -224,12 +292,23 @@ diyas.onLit = (i, source, isNew) => {
   }
 };
 const comboMult = () => 1 + Math.min(4, Math.floor(G.combo / 10) * 0.25);
+const CALLOUTS = { 25: 'शुभ! Shubh!', 50: 'शानदार! Shandaar!', 100: 'जय श्री राम!', 150: 'अद्भुत! Adbhut!', 200: 'दिव्य! Divya!', 300: 'अखंड ज्योति!' };
+function comboCallout(c) {
+  const txt = CALLOUTS[c] || (c > 300 && c % 100 === 0 ? `🔥 ${c}! अखंड ज्योति!` : null);
+  if (!txt) return;
+  const el = $('callout');
+  el.textContent = txt;
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+  audio.bell(880 + Math.min(c, 300), 0.18);
+  vibrate(c >= 100 ? [20, 40, 20] : 15);
+}
+function vibrate(p) { try { navigator.vibrate && navigator.vibrate(p); } catch (e) { /* unsupported */ } }
 
 // ---------------------------------------------------------------- UI helpers
 const _v = new THREE.Vector3();
 let popCount = 0;
 function popup(i, text) {
-  if (popCount > 26) return;
+  if (popCount > (isTouch ? 10 : 26)) return;
   _v.set(diyas.pos[i * 3], diyas.pos[i * 3 + 1] + 0.3, diyas.pos[i * 3 + 2]).project(camera);
   if (_v.z > 1) return;
   const el = document.createElement('div');
@@ -264,7 +343,7 @@ function showMessage(html, cb) {
   G.paused = true;
   $('message-ok').onclick = () => { $('message').classList.add('hidden'); G.paused = isModalOpen(); audio.init(); cb && cb(); };
 }
-const isModalOpen = () => !$('shop').classList.contains('hidden') || !$('summary').classList.contains('hidden') || !$('message').classList.contains('hidden');
+const isModalOpen = () => ['shop', 'summary', 'message', 'dash-result'].some((id) => !$(id).classList.contains('hidden'));
 
 // ---------------------------------------------------------------- quests
 const QUESTS = {
@@ -507,6 +586,38 @@ function renderShop() {
       teleport(0); startNight(1);
       audio.aarti(); checkAchievements();
     };
+  } else if (shopTab === 'compete') {
+    const runs = S.dash.runs;
+    const rv = RIVALS[Math.min(S.dash.ladder, RIVALS.length - 1)];
+    const m = medalFor(S.dash.best);
+    body.innerHTML = `
+      <div class="compete-hero">
+        <div class="ch-title">⚡ Deep Dash</div>
+        <div class="ds">90 seconds on the ghats. Same stats for everyone. Light more diyas than your rival, chain combos, grab power-ups 🔥⚡🪔✖️2⏳, and catch the vanars.</div>
+        <div class="summary-buttons" style="justify-content:flex-start">
+          <button class="btn primary" id="cp-start">${S.dash.ladder < RIVALS.length ? `⚔️ Race ${rv.name}` : '⚡ Race Hanuman again'}</button>
+          ${pendingChallenge ? `<button class="btn primary" id="cp-challenge">📨 Beat ${escapeHTML(pendingChallenge.name)} (${fmt(pendingChallenge.score)})</button>` : ''}
+          <button class="btn" id="cp-share" ${S.dash.best ? '' : 'disabled'}>📤 Challenge a friend</button>
+        </div>
+      </div>
+      <div class="settings-row">Your name <input id="cp-name" maxlength="20" placeholder="Deep Sevak" value="${escapeHTML(S.settings.name || '')}"></div>
+      <div class="section-title">Rival ladder · ${Math.min(S.dash.ladder, RIVALS.length)}/${RIVALS.length} defeated</div>
+      <div class="ladder">${RIVALS.map((r, k) => `<div class="rung ${k < S.dash.ladder ? 'beaten' : k === S.dash.ladder ? 'current' : ''}"><b>${k < S.dash.ladder ? '✔' : k === S.dash.ladder ? '⚔️' : '🔒'} ${r.name}</b><small>~${fmt(r.target)}</small></div>`).join('')}</div>
+      <div class="section-title">Records</div>
+      <div class="stats">
+        <div>Personal best</div><div>${fmt(S.dash.best)} ${m ? m[1] : ''}</div>
+        <div>Today's best</div><div>${S.dash.day === todayKey() ? fmt(S.dash.dayBest) : '—'}</div>
+        <div>Races · wins</div><div>${S.dash.played} · ${S.dash.wins}</div>
+        <div>Friends beaten</div><div>${S.dash.challengesWon}</div>
+      </div>
+      <div class="section-title">Medals</div>
+      <div class="medals">${[...MEDALS].reverse().map(([sc, ic, nm]) => `<span class="${S.dash.best >= sc ? 'got' : ''}">${ic} ${nm} <small>${fmt(sc)}</small></span>`).join('')}</div>
+      <div class="section-title">Your top runs</div>
+      ${runs.length ? `<div class="runs">${runs.map((r, k) => `<div><span>#${k + 1}</span><b>${fmt(r.score)}</b><small>${r.won ? '🏆' : '·'} vs ${escapeHTML(r.rival)} · ${new Date(r.date).toLocaleDateString()}</small></div>`).join('')}</div>` : '<div class="ds">No runs yet — your first Deep Dash pays double Punya today!</div>'}`;
+    $('cp-start').onclick = () => startDash(null);
+    if ($('cp-challenge')) $('cp-challenge').onclick = () => startDash(pendingChallenge);
+    $('cp-share').onclick = () => shareDash(S.dash.best, todaySeed());
+    $('cp-name').oninput = (e) => { S.settings.name = e.target.value.slice(0, 20); save(); };
   } else if (shopTab === 'achievements') {
     const got = ACHIEVEMENTS.filter((a) => S.ach[a[0]]).length;
     body.innerHTML = `<div class="note" style="margin:0 0 10px">${got} / ${ACHIEVEMENTS.length} unlocked</div><div class="grid">` + ACHIEVEMENTS.map(([id, icon, name, desc, , reward]) =>
@@ -692,6 +803,345 @@ function updateEvents(dt) {
   if (G.lakshmiT > 0) G.lakshmiT -= dt;
 }
 
+// ---------------------------------------------------------------- power-ups (both modes)
+function applyPowerUp(p) {
+  S.powerups++;
+  const info = POWERUPS[p.type];
+  vibrate(30);
+  audio.bell(1320, 0.2); audio.bell(1760, 0.14, 0.1);
+  fx.petalShower(p.x, p.y + 4, p.z, 60, 3);
+  if (p.type === 'blaze') {
+    const r = 5.5;
+    let n = 0;
+    diyas.forEachNear(p.x, p.z, r, (i) => {
+      if (i < diyas.unlockedEnd && !diyas.lit[i] && Math.abs(diyas.pos[i * 3 + 1] - p.y) < 3) { diyas.light(i, 'player'); n++; }
+    });
+    fx.anar(p.x, p.y, p.z, 2.5);
+    G.lastLightT = G.time;
+    toastPower(info, `${n} diyas burst alight!`);
+  } else if (p.type === 'speed') { G.speedT = 8; toastPower(info); }
+  else if (p.type === 'magnet') { G.magnetT = 10; toastPower(info); }
+  else if (p.type === 'double') { G.doubleT = 10; toastPower(info); }
+  else if (p.type === 'time') {
+    if (G.phase === 'dash') D.timeLeft += 6; else if (G.phase === 'play') G.timeLeft += 10;
+    toastPower(info, G.phase === 'dash' ? '+6 seconds' : '+10 seconds to the night');
+  }
+}
+function toastPower(info, extra) {
+  const el = $('callout');
+  el.innerHTML = `${info.icon} ${info.name}<small>${extra || info.desc}</small>`;
+  el.classList.remove('show'); void el.offsetWidth; el.classList.add('show');
+}
+function randomDiyaNear(x, z, r, rng = Math.random) {
+  for (let k = 0; k < 40; k++) {
+    const i = (rng() * diyas.unlockedEnd) | 0;
+    if (Math.hypot(diyas.pos[i * 3] - x, diyas.pos[i * 3 + 2] - z) < r) return i;
+  }
+  return (rng() * diyas.unlockedEnd) | 0;
+}
+function spawnPowerNear(type, rng = Math.random, life = 16) {
+  const i = randomDiyaNear(player.pos.x, player.pos.z, 28, rng);
+  let x = diyas.pos[i * 3], z = diyas.pos[i * 3 + 2];
+  if (z < 9.6) z = Math.min(9.3, z + 0.3);
+  powerups.spawn(type, x, world.heightAt(x, z), z, life);
+}
+function updatePowerTimers(dt) {
+  G.speedT = Math.max(0, G.speedT - dt);
+  G.magnetT = Math.max(0, G.magnetT - dt);
+  G.doubleT = Math.max(0, G.doubleT - dt);
+}
+
+// ---------------------------------------------------------------- Deep Dash (competitive mode)
+function mulberry32(a) {
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+const todaySeed = () => { const d = new Date(); return d.getFullYear() * 10000 + (d.getMonth() + 1) * 100 + d.getDate(); };
+const todayKey = () => new Date().toDateString();
+const playerName = () => (S.settings.name || '').trim() || 'Deep Sevak';
+
+// challenge links: ?c=<score>&n=<name>&d=<seed>
+const params = new URLSearchParams(location.search);
+let pendingChallenge = null;
+if (params.get('c')) {
+  const score = Math.max(0, Math.min(1e6, parseInt(params.get('c'), 10) || 0));
+  const name = (params.get('n') || 'A friend').replace(/[<>&"']/g, '').slice(0, 24);
+  const seed = parseInt(params.get('d'), 10) || todaySeed();
+  if (score > 0) pendingChallenge = { score, name, seed };
+}
+
+const D = { active: false };
+function dashRivalInfo() {
+  if (D.challenge) return { name: D.challenge.name, target: D.challenge.score, cloth: 0xd00000, challenge: true };
+  return RIVALS[Math.min(S.dash.ladder, RIVALS.length - 1)];
+}
+function startDash(challenge = null) {
+  if (G.phase === 'dash') return;
+  if (G.phase === 'won') { toast('🙏 Wait for the Maha Aarti to finish'); return; }
+  if (G.phase !== 'play' && G.phase !== 'title') { toast('Start the next night first, then come back for a Deep Dash'); return; }
+  if (challenge) history.replaceState(null, '', location.pathname);
+  const fromTitle = G.phase === 'title';
+  if (fromTitle) enterGame();
+  closeAllModals();
+  // remember the night so we can come back to it exactly
+  D.snap = {
+    phase: fromTitle ? 'fresh' : G.phase,
+    lit: diyas.lit.slice(), oil: diyas.oil.slice(), ig: diyas.igniteT.slice(), litCount: diyas.litCount,
+    pos: player.pos.clone(), timeLeft: G.timeLeft,
+  };
+  D.challenge = challenge;
+  const seed = challenge ? challenge.seed : todaySeed();
+  D.seed = seed;
+  D.rng = mulberry32(seed * 7 + 13);
+  D.active = true;
+  D.timeLeft = DASH_TIME;
+  D.countdown = 3.5;
+  D.score = 0; D.lights = 0; D.rivalScore = 0; D.maxCombo = 0; D.powerups = 0; D.vanars = 0;
+  D.nextPower = 3 + D.rng() * 2;
+  D.events = [
+    { t: 22 + D.rng() * 8, kind: 'monkey' }, { t: 38 + D.rng() * 8, kind: 'gust' },
+    { t: 55 + D.rng() * 8, kind: 'monkey' }, { t: 70 + D.rng() * 8, kind: 'gust' },
+  ];
+  G.phase = 'dash';
+  G.gust = null; G.windVec.set(0, 0, 0);
+  monkey.active = false; monkey.mesh.visible = false;
+  fx.golden.visible = false;
+  powerups.clear();
+  G.combo = 0; G.speedT = G.magnetT = G.doubleT = 0;
+  // a fair arena: the three ghats, identical stats for everyone
+  diyas.resetAll();
+  diyas.setUnlockedZones(3);
+  diyas.burnTime = 9999;
+  diyas.chainChance = 0;
+  player.lightRate = 9;
+  player.reach = 1.9;
+  player.stamina = 1;
+  sevaks.forEach((s) => (s.mesh.visible = false));
+  player.pos.set(0, world.heightAt(0, 4.5), 4.5); player.y = player.pos.y; player.heading = Math.PI;
+  G.cam.yaw = 0; G.cam.pitch = 0.5; G.cam.dist = 10;
+  // rival
+  const info = dashRivalInfo();
+  D.rivalInfo = info;
+  const rangeEnd = diyas.zoneEnd[2];
+  D.rival = new Sevak(scene, world, diyas, 0, 3, { source: 'rival', range: [0, rangeEnd], cloth: info.cloth });
+  D.rival.mesh.scale.setScalar(1.05);
+  D.rival.pos.set(D.rng() < 0.5 ? -40 : 40, 0, 4.5);
+  D.rival.pos.y = world.heightAt(D.rival.pos.x, 4.5);
+  D.rivalRate = info.target / 20 / (DASH_TIME - 4);
+  document.body.classList.add('dash');
+  $('rival-name').textContent = info.name;
+  $('rival-tag').textContent = `${info.challenge ? '📨 ' : '🏁 '}${info.name}`;
+  G.paused = false;
+  audio.init();
+}
+function dashOnLit(i, source, isNew) {
+  if (isNew) S.totalLit++;
+  if (source === 'rival') { D.rivalScore += isNew ? 20 : 10; return; }
+  if (G.time - G.lastLightT < 1.5) G.combo++; else G.combo = 1;
+  G.lastLightT = G.time;
+  comboCallout(G.combo);
+  D.maxCombo = Math.max(D.maxCombo, G.combo);
+  S.maxCombo = Math.max(S.maxCombo, G.combo);
+  const mult = 1 + Math.min(4, Math.floor(G.combo / 8) * 0.25);
+  const pts = Math.round((isNew ? 10 : 5) * mult * (G.doubleT > 0 ? 2 : 1));
+  D.score += pts; D.lights++;
+  audio.lightTick(G.combo % 22);
+  if (G.combo % 3 === 0 || mult >= 2) popup(i, '+' + pts);
+}
+function updateDash(dt) {
+  if (D.countdown > 0) {
+    const before = Math.ceil(D.countdown);
+    D.countdown -= dt;
+    const after = Math.ceil(D.countdown);
+    if (after !== before || D.countdown <= 0) {
+      if (D.countdown <= 0) { banner('शुरू! GO!', `Beat ${D.rivalInfo.name}: light more diyas than them in 90 seconds`, false, 1.6); audio.shankh(0); }
+      else if (after <= 3) { banner(String(after), '', false, 0.8); audio.bell(660, 0.25); }
+    }
+    return false; // frozen
+  }
+  D.timeLeft -= dt;
+  const elapsed = DASH_TIME - D.timeLeft;
+  // rival
+  D.rival.update(dt, D.rivalRate, 1.6, 4.4);
+  // power-ups
+  D.nextPower -= dt;
+  if (D.nextPower <= 0 && powerups.items.length < 3) {
+    spawnPowerNear(powerups.randomType(D.rng), D.rng, 12);
+    D.nextPower = 4 + D.rng() * 3;
+  }
+  // scripted hazards (same timings for everyone on the same seed)
+  for (const ev of D.events) {
+    if (ev.done || elapsed < ev.t) continue;
+    ev.done = true;
+    if (ev.kind === 'monkey') {
+      const lits = [];
+      diyas.forEachNear(player.pos.x, player.pos.z, 14, (i) => { if (diyas.lit[i]) lits.push(i); });
+      const i = lits.length ? lits[(D.rng() * lits.length) | 0] : randomDiyaNear(player.pos.x, player.pos.z, 14, D.rng);
+      monkey.spawn(diyas.pos[i * 3], diyas.pos[i * 3 + 2], diyas.pos[i * 3 + 1]);
+      monkey.life = 14;
+      audio.monkey();
+      banner('🐒 Vanar!', 'Catch it for +300 points', true, 1.6);
+    } else {
+      const dir = D.rng() < 0.5 ? -1 : 1;
+      const gx = player.pos.x + (D.rng() - 0.5) * 20;
+      G.gust = { t: -2, dir, x: gx, z: 5, done: false, dash: true };
+      banner('🌬️ हवा!', 'A gust is coming — it breaks combos!', true, 1.6);
+    }
+  }
+  if (monkey.active) {
+    const r = monkey.update(dt, world, diyas, player);
+    if (r.caught) { D.score += 300; D.vanars++; S.monkeys++; banner('🐒 Pakad liya!', '+300', false, 1.2); audio.coin(); vibrate(40); }
+  }
+  if (G.gust) {
+    const g = G.gust;
+    g.t += dt;
+    if (g.t > 0 && !g.done) {
+      g.done = true;
+      audio.wind(3);
+      fx.windStreaks(g.x, 0, 10, g.dir);
+      diyas.gust(g.x, 18, 0, 10, 0.35);
+      if (Math.abs(player.pos.x - g.x) < 18) { G.combo = 0; vibrate(60); }
+    }
+    const env = g.t > 0 ? Math.max(0, Math.sin(Math.min(1, g.t / 3) * Math.PI)) : 0.1;
+    G.windVec.set(g.dir * env * 1.2, 0, 0);
+    if (g.t > 3) { G.gust = null; G.windVec.set(0, 0, 0); }
+  }
+  if (D.timeLeft <= 0) { endDash(); return false; }
+  return true;
+}
+function endDash() {
+  D.timeLeft = 0;
+  G.phase = 'dashover';
+  S.dash.played++;
+  const score = D.score, rival = D.rivalScore;
+  const won = score > rival;
+  const prevBest = S.dash.best;
+  const newBest = score > prevBest;
+  S.dash.best = Math.max(prevBest, score);
+  const firstToday = S.dash.day !== todayKey();
+  if (firstToday) { S.dash.day = todayKey(); S.dash.dayBest = 0; }
+  S.dash.dayBest = Math.max(S.dash.dayBest, score);
+  let ladderMsg = '';
+  if (won && !D.challenge) {
+    S.dash.wins++;
+    if (S.dash.ladder < RIVALS.length && RIVALS[S.dash.ladder].name === D.rivalInfo.name) {
+      S.dash.ladder++;
+      ladderMsg = S.dash.ladder < RIVALS.length ? `Next rival: <b>${RIVALS[S.dash.ladder].name}</b>` : '🏆 You have defeated every rival in Ayodhya!';
+    }
+  }
+  if (won && D.challenge) S.dash.challengesWon++;
+  S.dash.runs.push({ score, lights: D.lights, combo: D.maxCombo, date: Date.now(), rival: D.rivalInfo.name, won });
+  S.dash.runs.sort((a, b) => b.score - a.score);
+  S.dash.runs = S.dash.runs.slice(0, 10);
+  const medal = medalFor(score);
+  const reward = Math.round(score * 0.12 * (1 + 0.25 * (S.bestNight - 1)) * (firstToday ? 2 : 1) * (won ? 1.5 : 1));
+  S.punya += reward; S.lifetime += reward;
+  D.lastResult = { score, seed: D.seed };
+  // cleanup arena
+  D.rival.dispose(scene); D.rival = null;
+  powerups.clear();
+  monkey.active = false; monkey.mesh.visible = false;
+  G.gust = null; G.windVec.set(0, 0, 0);
+  if (won) { audio.aarti(); for (let k = 0; k < 12; k++) setTimeout(() => fx.launch(-60 + Math.random() * 120, -15 - Math.random() * 25, 0.4), k * 250); }
+  else audio.bell(330, 0.3);
+  const nm = nextMedal(score);
+  $('dash-result-body').innerHTML = `
+    <div class="sum-title">${won ? 'विजय! Victory!' : 'So close!'}</div>
+    <div class="sum-sub">${won ? `You out-lit <b>${D.rivalInfo.name}</b>` : `<b>${D.rivalInfo.name}</b> lit more diyas this time`}</div>
+    <div class="dash-scores">
+      <div class="ds-you"><small>${escapeHTML(playerName())}</small><b>${fmt(score)}</b></div>
+      <div class="ds-vs">vs</div>
+      <div class="ds-rival"><small>${D.rivalInfo.name}</small><b>${fmt(rival)}</b></div>
+    </div>
+    <div class="medal-big">${medal ? `${medal[1]} <span>${medal[2]} medal</span>` : '<span>No medal yet</span>'}</div>
+    <div class="sum-rows">
+      <div>Diyas lit</div><div>${fmt(D.lights)}</div>
+      <div>Best combo</div><div>${D.maxCombo}</div>
+      <div>Personal best</div><div>${fmt(S.dash.best)}${newBest && prevBest > 0 ? ' 🎉 NEW!' : ''}</div>
+      <div>Reward</div><div>+${fmt(reward)} ✦${firstToday ? ' (daily x2)' : ''}</div>
+    </div>
+    ${nm ? `<div class="note">${fmt(nm[0] - score)} more points for ${nm[1]} ${nm[2]}</div>` : ''}
+    ${ladderMsg ? `<div class="note">${ladderMsg}</div>` : ''}`;
+  $('dash-result').classList.remove('hidden');
+  G.paused = true;
+  checkAchievements();
+  save();
+}
+const escapeHTML = (t) => String(t).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+function leaveDash() {
+  D.active = false;
+  document.body.classList.remove('dash');
+  $('dash-result').classList.add('hidden');
+  if (D.rival) { D.rival.dispose(scene); D.rival = null; }
+  powerups.clear();
+  applyStats();
+  const sn = D.snap;
+  diyas.resetAll();
+  if (sn.phase === 'fresh') {
+    G.phase = 'play';
+    player.pos.set(0, world.heightAt(0, 7.8), 7.8);
+    startNight(S.night);
+  } else {
+    diyas.lit.set(sn.lit); diyas.oil.set(sn.oil); diyas.igniteT.set(sn.ig); diyas.litCount = sn.litCount;
+    player.pos.copy(sn.pos);
+    G.timeLeft = sn.timeLeft;
+    G.phase = sn.phase;
+  }
+  player.y = player.pos.y;
+  sevaks.forEach((s) => (s.mesh.visible = true));
+  G.combo = 0;
+  G.paused = isModalOpen();
+  save();
+}
+async function shareDash(score, seed) {
+  const url = `${location.origin}${location.pathname}?c=${score}&n=${encodeURIComponent(playerName())}&d=${seed}`;
+  const text = `🪔 I scored ${fmt(score)} in Ayodhya Deepotsav's Deep Dash! Can you light more diyas than me?`;
+  S.dash.shared++;
+  checkAchievements();
+  save();
+  try {
+    if (navigator.share) { await navigator.share({ title: 'Ayodhya Deepotsav', text, url }); return; }
+  } catch (e) { if (e.name === 'AbortError') return; }
+  try { await navigator.clipboard.writeText(`${text} ${url}`); toast('📋 Challenge link copied — send it to your friends!'); }
+  catch (e) { prompt('Copy this challenge link:', url); }
+}
+function updateDashHUD() {
+  $('dash-timer').textContent = D.countdown > 0 ? 'Ready…' : fmtTime(Math.max(0, D.timeLeft));
+  $('dash-timer').classList.toggle('urgent', D.timeLeft < 10 && D.countdown <= 0);
+  $('dash-you').textContent = fmt(D.score);
+  $('dash-rival').textContent = fmt(D.rivalScore);
+  const top = Math.max(D.score, D.rivalScore, 1);
+  $('dash-you-bar').style.width = (D.score / top) * 100 + '%';
+  $('dash-rival-bar').style.width = (D.rivalScore / top) * 100 + '%';
+  $('dash-panel').classList.toggle('leading', D.score > D.rivalScore);
+  const nm = nextMedal(D.score), m = medalFor(D.score);
+  $('dash-medal').textContent = `${m ? m[1] + ' ' + m[2] : 'No medal'}${nm ? ` · ${nm[1]} at ${fmt(nm[0])}` : ''}`;
+  let b = '';
+  if (G.speedT > 0) b += `<span class="boost">⚡ ${Math.ceil(G.speedT)}s</span>`;
+  if (G.magnetT > 0) b += `<span class="boost">🪔 ${Math.ceil(G.magnetT)}s</span>`;
+  if (G.doubleT > 0) b += `<span class="boost">✖2 ${Math.ceil(G.doubleT)}s</span>`;
+  setHTML('dash-boosts', b);
+}
+function updateRivalTag() {
+  const tag = $('rival-tag');
+  if (!D.rival) { tag.style.display = 'none'; return; }
+  _v.set(D.rival.pos.x, D.rival.pos.y + 2.3, D.rival.pos.z).project(camera);
+  if (_v.z > 1 || Math.abs(_v.x) > 1.1 || Math.abs(_v.y) > 1.1) { tag.style.display = 'none'; return; }
+  tag.style.display = 'block';
+  tag.style.transform = `translate(${(_v.x * 0.5 + 0.5) * innerWidth}px, ${(-_v.y * 0.5 + 0.5) * innerHeight}px) translate(-50%, -100%)`;
+}
+function closeAllModals() {
+  ['shop', 'summary', 'message', 'dash-result'].forEach((id) => $(id).classList.add('hidden'));
+  G.reopenSummary = false;
+}
+const _htmlCache = {};
+function setHTML(id, h) { if (_htmlCache[id] !== h) { _htmlCache[id] = h; $(id).innerHTML = h; } }
+
 // ---------------------------------------------------------------- input
 const keys = {};
 const input = { x: 0, z: 0, sprint: false };
@@ -699,6 +1149,10 @@ addEventListener('keydown', (e) => {
   if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT') return;
   keys[e.code] = true;
   if (G.phase === 'title') return;
+  if (G.phase === 'dash' || G.phase === 'dashover') {
+    if (e.code === 'Escape' && G.phase === 'dash') { G.paused = !G.paused; banner(G.paused ? '⏸ Paused' : '▶', G.paused ? 'Press Esc to continue' : '', false, G.paused ? 999 : 0.6); }
+    return;
+  }
   if (e.code === 'KeyB') { $('shop').classList.contains('hidden') ? openShop() : closeShop(); }
   if (e.code === 'Escape') {
     if (!$('shop').classList.contains('hidden')) closeShop();
@@ -785,8 +1239,11 @@ function updateHUD() {
   let b = '';
   if (G.utsavT > 0) b += `<span class="boost">🥁 Utsav x2 · ${Math.ceil(G.utsavT)}s</span>`;
   if (G.lakshmiT > 0) b += `<span class="boost">🪙 Lakshmi x3 · ${Math.ceil(G.lakshmiT)}s</span>`;
+  if (G.speedT > 0) b += `<span class="boost">⚡ ${Math.ceil(G.speedT)}s</span>`;
+  if (G.magnetT > 0) b += `<span class="boost">🪔 reach ${Math.ceil(G.magnetT)}s</span>`;
+  if (G.doubleT > 0) b += `<span class="boost">✖2 ${Math.ceil(G.doubleT)}s</span>`;
   if (up().bhajan) b += `<span class="boost">🎶 x${(1 + 0.25 * up().bhajan).toFixed(2)}</span>`;
-  $('boosts').innerHTML = b;
+  setHTML('boosts', b);
   const c = $('combo');
   if (G.combo >= 5 && G.time - G.lastLightT < 1.5) {
     c.classList.remove('hidden');
@@ -871,30 +1328,61 @@ function updateCamera(dt) {
 // ---------------------------------------------------------------- main loop
 const clock = new THREE.Clock();
 let saveT = 0, achT = 0;
+function lightByPlayer(dt) {
+  const rate = player.lightRate * (G.speedT > 0 ? 2 : 1);
+  const reach = player.reach * (G.magnetT > 0 ? 1.8 : 1);
+  player.lightBudget = Math.min(player.lightBudget + rate * dt, 3);
+  while (player.lightBudget >= 1) {
+    const i = diyas.findTarget(player.pos.x, player.pos.z, reach, player.pos.y);
+    if (i < 0) { player.lightBudget = Math.min(player.lightBudget, 1); break; }
+    diyas.light(i, 'player');
+    player.lightBudget -= 1;
+  }
+}
+function cullSevaks() {
+  // only the nearest few helpers are drawn; the rest keep working off-screen
+  const cap = quality === 'low' ? 8 : quality === 'medium' ? 16 : 30;
+  const ranked = sevaks.map((s) => [s, (s.pos.x - player.pos.x) ** 2 + (s.pos.z - player.pos.z) ** 2]).sort((a, b) => a[1] - b[1]);
+  ranked.forEach(([s, d2], k) => { s.mesh.visible = k < cap && d2 < 90 * 90; });
+}
 function frame() {
   requestAnimationFrame(frame);
-  const dt = Math.min(0.05, clock.getDelta());
+  frameNo++;
+  const raw = clock.getDelta();
+  adaptResolution(raw);
+  const dt = Math.min(0.05, raw);
   G.time += dt;
   const t = G.time;
-  const sim = !G.paused && G.phase !== 'title';
+  const sim = !G.paused && G.phase !== 'title' && G.phase !== 'dashover';
+  const dashing = G.phase === 'dash';
 
   // input → player
   input.x = (keys.KeyD || keys.ArrowRight ? 1 : 0) - (keys.KeyA || keys.ArrowLeft ? 1 : 0) + joy.x;
   input.z = (keys.KeyW || keys.ArrowUp ? 1 : 0) - (keys.KeyS || keys.ArrowDown ? 1 : 0) + joy.z;
   input.sprint = keys.ShiftLeft || keys.ShiftRight || touchRun;
-  if (!sim) { input.x = input.z = 0; }
+  if (!sim || (dashing && D.countdown > 0)) { input.x = input.z = 0; }
+  player.baseSpeed = 4.6 * (G.speedT > 0 ? 1.45 : 1);
   player.update(dt, input, G.cam.yaw);
 
-  if (sim) {
+  if (sim && dashing) {
     S.playTime += dt;
-    // player lights diyas
-    player.lightBudget = Math.min(player.lightBudget + player.lightRate * dt, 3);
-    while (player.lightBudget >= 1) {
-      const i = diyas.findTarget(player.pos.x, player.pos.z, player.reach, player.pos.y);
-      if (i < 0) { player.lightBudget = Math.min(player.lightBudget, 1); break; }
-      diyas.light(i, 'player');
-      player.lightBudget -= 1;
+    if (updateDash(dt)) lightByPlayer(dt);
+    diyas.update(dt, t);
+    for (const p of powerups.update(dt, t, player.pos.x, player.pos.z)) { D.powerups++; applyPowerUp(p); }
+    updatePowerTimers(dt);
+  } else if (sim) {
+    S.playTime += dt;
+    lightByPlayer(dt);
+    // power-ups pop up every so often in the main game too
+    G.nextPower -= dt;
+    if (G.nextPower <= 0 && powerups.items.length === 0 && G.phase === 'play') {
+      spawnPowerNear(powerups.randomType());
+      G.nextPower = 25 + Math.random() * 20;
     }
+    for (const p of powerups.update(dt, t, player.pos.x, player.pos.z)) applyPowerUp(p);
+    updatePowerTimers(dt);
+    G.sevakCullT -= dt;
+    if (G.sevakCullT <= 0) { G.sevakCullT = 0.5; cullSevaks(); }
     const sr = sevakRate(), ss = sevakSpeed();
     for (const s of sevaks) s.update(dt, sr, 1.3, ss);
     diyas.update(dt, t);
@@ -939,7 +1427,10 @@ function frame() {
   world.update(t, dt, Math.min(1, diyas.litCount / 3000));
   updateCamera(dt);
   hudT += dt;
-  if (hudT > 0.1 && G.phase !== 'title') { hudT = 0; updateHUD(); }
+  if (D.active) {
+    updateRivalTag();
+    if (hudT > 0.1) { hudT = 0; updateDashHUD(); }
+  } else if (hudT > 0.1 && G.phase !== 'title') { hudT = 0; updateHUD(); }
   composer.render();
 }
 
@@ -968,11 +1459,17 @@ function dailyAndOffline() {
   if (msgs.length) showMessage(`<div class="sum-title">स्वागत है!</div>${msgs.join('')}`);
 }
 
-function begin() {
+function enterGame() {
   audio.init();
   audio.setMusic(S.settings.music); audio.setSfx(S.settings.sfx);
   $('title').classList.add('hidden');
   $('hud').classList.remove('hidden');
+  diyas.resetAll(); // clear the title-screen showcase before anything reads the lit count
+  applyStats();
+  ensureQuests(); renderQuests();
+}
+function begin() {
+  enterGame();
   diyas.resetAll();
   monkey.active = false;
   player.pos.set(0, world.heightAt(0, 7.8), 7.8);
@@ -987,6 +1484,20 @@ function begin() {
 }
 
 $('btn-play').onclick = begin;
+$('btn-dash').onclick = () => startDash(pendingChallenge);
+$('dash-again').onclick = () => { $('dash-result').classList.add('hidden'); const ch = D.challenge; const snap = D.snap; G.phase = 'play'; startDashKeepSnap(ch, snap); };
+$('dash-back').onclick = () => { const fresh = D.snap.phase === 'fresh'; leaveDash(); if (fresh) dailyAndOffline(); };
+$('dash-share').onclick = () => shareDash(D.lastResult.score, D.lastResult.seed);
+function startDashKeepSnap(ch, snap) {
+  // replay without overwriting the saved night
+  startDash(ch);
+  D.snap = snap;
+}
+if (pendingChallenge) {
+  $('challenge-info').innerHTML = `📨 <b>${escapeHTML(pendingChallenge.name)}</b> challenges you to beat <b>${fmt(pendingChallenge.score)}</b> in Deep Dash!`;
+  $('challenge-info').classList.remove('hidden');
+  $('btn-dash').textContent = '⚔️ Accept the challenge';
+}
 $('quality-select').onchange = (e) => { S.settings.quality = e.target.value; save(); location.reload(); };
 addEventListener('visibilitychange', () => { if (document.hidden && G.phase !== 'title') save(); });
 addEventListener('beforeunload', () => { if (G.phase !== 'title') save(); });
@@ -1002,4 +1513,4 @@ $('loading').classList.add('hidden');
 $('title').classList.remove('hidden');
 frame();
 // debugging handle (used by automated screenshots)
-window.__deepotsav = { G, get S() { return S; }, player, diyas, fx, camera, begin, world };
+window.__deepotsav = { G, D, get S() { return S; }, player, diyas, fx, camera, begin, world, startDash, powerups };

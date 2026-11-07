@@ -34,9 +34,12 @@
       Light the ghats, guard the flames from wind and mischievous vanars, and make this the brightest Deepotsav ever.</p>
     <div class="title-buttons">
       <button id="btn-play" class="btn primary big">🪔 Begin Deepotsav</button>
+      <button id="btn-dash" class="btn big dash-btn">⚡ Deep Dash</button>
     </div>
+    <div id="challenge-info" class="challenge-info hidden"></div>
     <div id="continue-info" class="continue-info"></div>
     <div class="controls-help">
+      <div><b>Deep Dash</b>: a 90-second race against a ladder of rivals; share your score to challenge friends.</div>
       <div><kbd>W A S D</kbd> walk · <kbd>Shift</kbd> run · drag mouse to look · scroll to zoom</div>
       <div>Your puja thali lights every diya you pass. <kbd>B</kbd> Bazaar · <kbd>F</kbd> fireworks · <kbd>G</kbd> anar · <kbd>R</kbd> float a diya · <kbd>P</kbd> photo mode</div>
     </div>
@@ -71,6 +74,15 @@
   </div>
   <div id="stamina"><div id="stamina-fill"></div></div>
   <div id="banner" class="banner"></div>
+  <div id="callout" class="callout"></div>
+  <div id="dash-panel" class="panel">
+    <div class="dash-top"><span>⚡ Deep Dash</span><span id="dash-timer">1:30</span></div>
+    <div class="race"><span class="who">You</span><div class="bar"><div id="dash-you-bar" class="you"></div></div><b id="dash-you">0</b></div>
+    <div class="race"><span class="who" id="rival-name">Rival</span><div class="bar"><div id="dash-rival-bar" class="rival"></div></div><b id="dash-rival">0</b></div>
+    <div class="dash-medal" id="dash-medal"></div>
+    <div class="boosts" id="dash-boosts"></div>
+  </div>
+  <div id="rival-tag" class="rival-tag"></div>
   <div id="toasts"></div>
   <div id="arrow" class="arrow hidden">➤<span id="arrow-dist"></span></div>
   <div id="popups"></div>
@@ -92,6 +104,7 @@
       <div class="tabs">
         <button data-tab="upgrades" class="tab active">Upgrades</button>
         <button data-tab="zones" class="tab">Ghats &amp; Zones</button>
+        <button data-tab="compete" class="tab">⚡ Compete</button>
         <button data-tab="ashirwad" class="tab">Ashirwad</button>
         <button data-tab="achievements" class="tab">Achievements</button>
         <button data-tab="settings" class="tab">Stats &amp; Settings</button>
@@ -110,6 +123,18 @@
     <div class="summary-buttons">
       <button id="btn-shop2" class="btn">🛕 Bazaar</button>
       <button id="btn-next" class="btn primary">Next Night ➜</button>
+    </div>
+  </div>
+</div>
+
+<!-- Deep Dash result -->
+<div id="dash-result" class="modal hidden">
+  <div class="modal-card">
+    <div id="dash-result-body"></div>
+    <div class="summary-buttons">
+      <button id="dash-share" class="btn">📤 Challenge friends</button>
+      <button id="dash-again" class="btn">↻ Race again</button>
+      <button id="dash-back" class="btn primary">🪔 Back to Ayodhya</button>
     </div>
   </div>
 </div>

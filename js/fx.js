@@ -63,6 +63,9 @@ class Particles {
     scene.add(this.points);
     this.onDeath = null;
     this.time = 0;
+    this.hi = -1;      // highest index in use: only this prefix is simulated, uploaded and drawn
+    this.lastN = 0;
+    g.setDrawRange(0, 0);
   }
   emit(x, y, z, vx, vy, vz, life, r, g, b, size, drag = 0.5, grav = 9.8, flags = 0, payload = null) {
     const i = this.free.pop();
@@ -73,12 +76,13 @@ class Particles {
     this.size[i] = size; this.life[i] = this.maxLife[i] = life;
     this.drag[i] = drag; this.grav[i] = grav; this.flags[i] = flags; this.payload[i] = payload;
     this.alpha[i] = 1;
+    if (i > this.hi) this.hi = i;
     return i;
   }
   update(dt) {
     this.time += dt;
     const { p, v, life, maxLife, drag, grav, flags, alpha } = this;
-    for (let i = 0; i < this.max; i++) {
+    for (let i = 0; i <= this.hi; i++) {
       if (life[i] <= 0) continue;
       life[i] -= dt;
       if (life[i] <= 0) {
@@ -104,11 +108,19 @@ class Particles {
         v[i * 3 + 2] += Math.cos(this.time * 2.3 + i * 1.3) * dt * 2;
       }
     }
+    while (this.hi >= 0 && life[this.hi] <= 0) this.hi--;
+    const n = this.hi + 1;
     const g = this.points.geometry;
-    g.attributes.position.needsUpdate = true;
-    g.attributes.color.needsUpdate = true;
-    g.attributes.aSize.needsUpdate = true;
-    g.attributes.aAlpha.needsUpdate = true;
+    g.setDrawRange(0, n);
+    if (n > 0) {
+      for (const [name, sz] of [['position', 3], ['color', 3], ['aSize', 1], ['aAlpha', 1]]) {
+        const a = g.attributes[name];
+        a.clearUpdateRanges();
+        a.addUpdateRange(0, n * sz);
+        a.needsUpdate = true;
+      }
+    }
+    this.lastN = n;
   }
 }
 
@@ -402,18 +414,27 @@ export class Effects {
     this.fountainLight.intensity = fl * (14 + Math.random() * 8);
 
     // floating diyas
-    const m = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(1, 1, 1), p = new THREE.Vector3();
-    const zero = new THREE.Matrix4().makeScale(0, 0, 0);
+    this.floatUniforms.uTime.value = t;
+    this.floatUniforms.uWind.value.copy(windVec).multiplyScalar(0.5);
+    const anyActive = this.floatData.some((f) => f.active);
+    if (anyActive || this.floatWasActive) this._updateFloating(dt, t);
+    this.floatWasActive = anyActive;
+    this._updateRest(dt, t);
+  }
+  _updateFloating(dt, t) {
+    const m = this._m ||= new THREE.Matrix4(), q = this._q ||= new THREE.Quaternion(), s = this._s ||= new THREE.Vector3(1, 1, 1), p = this._p ||= new THREE.Vector3();
+    const eul = this._eul ||= new THREE.Euler();
+    const zero = this._zero ||= new THREE.Matrix4().makeScale(0, 0, 0);
     const offs = this.floatOffsets.array, vis = this.floatVis.array;
     for (let i = 0; i < this.floatMax; i++) {
       const f = this.floatData[i];
-      if (!f.active) { vis[i] = 0; this.donas.setMatrixAt(i, zero); continue; }
+      if (!f.active) { if (vis[i] !== 0 || !f.cleared) { vis[i] = 0; this.donas.setMatrixAt(i, zero); f.cleared = true; } continue; }
       f.t += dt;
       f.x += f.vx * dt; f.z += f.vz * dt; f.vz *= (1 - dt * 0.05);
       if (f.z < -60) f.vz = Math.max(f.vz, -0.05);
       const bob = Math.sin(t * 1.6 + f.ph) * 0.03;
       p.set(f.x, 0.04 + bob, f.z);
-      q.setFromEuler(new THREE.Euler(Math.sin(t + f.ph) * 0.08, 0, Math.cos(t * 1.3 + f.ph) * 0.08));
+      q.setFromEuler(eul.set(Math.sin(t + f.ph) * 0.08, 0, Math.cos(t * 1.3 + f.ph) * 0.08));
       m.compose(p, q, s);
       this.donas.setMatrixAt(i, m);
       offs[i * 3] = f.x; offs[i * 3 + 1] = 0.1 + bob; offs[i * 3 + 2] = f.z;
@@ -422,8 +443,8 @@ export class Effects {
     }
     this.donas.instanceMatrix.needsUpdate = true;
     this.floatOffsets.needsUpdate = true; this.floatVis.needsUpdate = true;
-    this.floatUniforms.uTime.value = t;
-    this.floatUniforms.uWind.value.copy(windVec).multiplyScalar(0.5);
+  }
+  _updateRest(dt, t) {
 
     // vimana flight
     if (this.vimanaT >= 0) {
