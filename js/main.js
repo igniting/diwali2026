@@ -279,7 +279,7 @@ diyas.onLit = (i, source, isNew) => {
     addPunya(gain);
     audio.lightTick(G.combo % 22);
     G.utsav = Math.min(1, G.utsav + (G.utsavT > 0 ? 0 : 0.0016 * (1 + 0.15 * up().utsav)));
-    if (G.combo % 3 === 0 || cm > 1) popup(i, '+' + (gain < 10 ? gain.toFixed(1) : fmt(gain)));
+    if (isTouch ? G.combo % 10 === 0 : (G.combo % 3 === 0 || cm > 1)) popup(i, '+' + (gain < 10 ? gain.toFixed(1) : fmt(gain)));
   } else if (source === 'sevak') {
     addPunya((isNew ? 0.5 : 0.25) * mult);
   } else {
@@ -321,7 +321,8 @@ function popup(i, text) {
   setTimeout(() => { el.remove(); popCount--; }, 900);
 }
 let bannerTimer = 0;
-function banner(title, sub = '', warn = false, dur = 3.2) {
+function banner(title, sub = '', warn = false, dur = 3.2, keep = false) {
+  if (isTouch && !keep) sub = ''; // phones: headline only, unless the detail matters
   const b = $('banner');
   b.innerHTML = `${title}${sub ? `<small>${sub}</small>` : ''}`;
   b.classList.toggle('warn', warn);
@@ -329,13 +330,14 @@ function banner(title, sub = '', warn = false, dur = 3.2) {
   clearTimeout(bannerTimer);
   bannerTimer = setTimeout(() => b.classList.remove('show'), dur * 1000);
 }
-function toast(html) {
+function toast(html, short) {
+  if (isTouch) { if (short === null) return; if (short) html = short; }
   const t = document.createElement('div');
   t.className = 'toast';
   t.innerHTML = html;
   $('toasts').appendChild(t);
-  setTimeout(() => t.remove(), 4200);
-  while ($('toasts').children.length > 4) $('toasts').firstChild.remove();
+  setTimeout(() => t.remove(), isTouch ? 2800 : 4200);
+  while ($('toasts').children.length > (isTouch ? 2 : 4)) $('toasts').firstChild.remove();
 }
 function showMessage(html, cb) {
   $('message-body').innerHTML = html;
@@ -377,7 +379,7 @@ function questProgress(type, v, add) {
       q.done = true; changed = true;
       S.punya += q.reward; S.lifetime += q.reward;
       S.questLevel++;
-      toast(`✅ Quest complete: ${QUESTS[q.type].text(q.goal)} — <b>+${fmt(q.reward)} ✦</b>`);
+      toast(`✅ Quest complete: ${QUESTS[q.type].text(q.goal)} — <b>+${fmt(q.reward)} ✦</b>`, `✅ Task done <b>+${fmt(q.reward)} ✦</b>`);
       audio.coin();
       setTimeout(() => {
         const idx = S.quests.indexOf(q);
@@ -389,7 +391,10 @@ function questProgress(type, v, add) {
   if (changed) renderQuests();
 }
 function renderQuests() {
-  $('quests').innerHTML = '<h4>Seva Tasks</h4>' + S.quests.map((q) => `
+  const done = S.quests.filter((q) => q.done).length;
+  const best = Math.max(0, ...S.quests.map((q) => Math.min(1, q.progress / q.goal)));
+  $('quests').classList.toggle('open', !isTouch || !!S.settings.questsOpen);
+  $('quests').innerHTML = `<h4>📜 Seva Tasks<span class="qmini">${done ? done + ' ✔' : Math.round(best * 100) + '%'}</span><i>▾</i></h4>` + S.quests.map((q) => `
     <div class="quest ${q.done ? 'done' : ''}">
       <div class="qt"><span>${q.done ? '✔ ' : ''}${QUESTS[q.type].text(q.goal)}</span><span class="qr">+${fmt(q.reward)}</span></div>
       <div class="bar"><div style="width:${Math.min(100, (q.progress / q.goal) * 100)}%"></div></div>
@@ -402,7 +407,7 @@ function checkAchievements() {
     if (S.ach[id] || !test(S)) continue;
     S.ach[id] = Date.now();
     if (reward) { S.punya += reward; S.lifetime += reward; }
-    toast(`${icon} <b>${name}</b><br>${desc}${reward ? ` · +${fmt(reward)} ✦` : ''}`);
+    toast(`${icon} <b>${name}</b><br>${desc}${reward ? ` · +${fmt(reward)} ✦` : ''}`, `${icon} <b>${name}</b>${reward ? ` +${fmt(reward)}` : ''}`);
     audio.bell(990, 0.25); audio.bell(1320, 0.18, 0.15);
   }
 }
@@ -420,7 +425,7 @@ function startNight(n) {
   G.nextMonkey = n >= 3 ? 35 + Math.random() * 30 : 1e9;
   G.nextGolden = 25 + Math.random() * 40;
   sevaks.forEach((s) => { s.target = -1; });
-  banner(`रात ${n} · Night ${n}`, `Light <b>${fmt(G.target)}</b> diyas so the Pushpak Vimana can find Ayodhya`, false, 4.5);
+  banner(`रात ${n} · Night ${n}`, isTouch ? `🎯 Light ${fmt(G.target)} diyas` : `Light <b>${fmt(G.target)}</b> diyas so the Pushpak Vimana can find Ayodhya`, false, 4.5, true);
   audio.bell(660, 0.3); audio.bell(990, 0.2, 0.4);
   save();
 }
@@ -663,7 +668,7 @@ function buyUpgrade(id) {
   if (n) {
     audio.coin();
     applyStats();
-    if (id === 'sevak') toast(`🙋 ${n > 1 ? n + ' new sevaks have' : 'A new sevak has'} joined the seva!`);
+    if (id === 'sevak') toast(`🙋 ${n > 1 ? n + ' new sevaks have' : 'A new sevak has'} joined the seva!`, null);
     checkAchievements();
     save();
   }
@@ -678,7 +683,7 @@ function buyZone(k) {
   audio.aarti();
   closeShop();
   teleport(k);
-  banner(`${z.hindi}`, `${z.name} is open — ${fmt(diyas.zoneCount[k])} more diyas await!`, false, 4);
+  banner(`${z.hindi}`, isTouch ? `+${fmt(diyas.zoneCount[k])} diyas` : `${z.name} is open — ${fmt(diyas.zoneCount[k])} more diyas await!`, false, 4, true);
   checkAchievements();
   save();
 }
@@ -721,7 +726,7 @@ function updateEvents(dt) {
       const zmin = g.z < 22 ? 0 : g.z - 25, zmax = g.z < 22 ? 21 : g.z + 25;
       fx.windStreaks(g.x, zmin, zmax, g.dir);
       const out = diyas.gust(g.x, 22, zmin, zmax, windChance());
-      if (out > 0) setTimeout(() => toast(`🌬️ The wind snuffed out <b>${fmt(out)}</b> diyas`), 600);
+      if (out > 0) setTimeout(() => toast(`🌬️ The wind snuffed out <b>${fmt(out)}</b> diyas`, null), 600);
     }
     const env = g.t > 0 ? Math.max(0, Math.sin(Math.min(1, g.t / 4) * Math.PI)) : Math.max(0, (g.t + 3) / 3) * 0.15;
     G.windVec.set(g.dir * env * 1.2, 0, 0);
@@ -752,11 +757,11 @@ function updateEvents(dt) {
       const reward = Math.round(100 + incomeRate() * 45);
       S.punya += reward; S.lifetime += reward; S.monkeys++;
       questProgress('monkey', 1, true);
-      banner('🐒 Pakad liya!', `The vanar drops a laddoo — +${fmt(reward)} ✦`, false, 2.5);
+      banner(isTouch ? `🐒 +${fmt(reward)} ✦` : '🐒 Pakad liya!', `The vanar drops a laddoo — +${fmt(reward)} ✦`, false, 2.5);
       audio.coin();
       checkAchievements();
     } else if (r.escaped) {
-      toast('🐒 The vanar escaped into the trees…');
+      toast('🐒 The vanar escaped into the trees…', null);
     }
   }
   // golden diya
@@ -781,7 +786,7 @@ function updateEvents(dt) {
       const reward = Math.round(150 + incomeRate() * 30);
       S.punya += reward; S.lifetime += reward; S.goldens++;
       questProgress('golden', 1, true);
-      banner('🪙 Lakshmi Kripa!', `x3 Punya for 20 seconds · +${fmt(reward)} ✦`, false, 3);
+      banner(isTouch ? '🪙 x3 Punya!' : '🪙 Lakshmi Kripa!', `x3 Punya for 20 seconds · +${fmt(reward)} ✦`, false, 3);
       fx.petalShower(player.pos.x, player.pos.y + 8, player.pos.z, 200, 8);
       audio.coin(); audio.bell(1320, 0.3, 0.3);
       checkAchievements();
@@ -796,7 +801,7 @@ function updateEvents(dt) {
   } else if (G.utsav >= 1) {
     G.utsavT = 15 + 4 * up().utsav;
     S.utsavs++;
-    banner('🥁 उत्सव! UTSAV!', 'Double Punya — the whole of Ayodhya celebrates!', false, 3);
+    banner(isTouch ? '🥁 Utsav! x2' : '🥁 उत्सव! UTSAV!', 'Double Punya — the whole of Ayodhya celebrates!', false, 3);
     audio.dhol(64, 140); audio.shankh(0.2);
     checkAchievements();
   }
@@ -951,7 +956,7 @@ function dashOnLit(i, source, isNew) {
   const pts = Math.round((isNew ? 10 : 5) * mult * (G.doubleT > 0 ? 2 : 1));
   D.score += pts; D.lights++;
   audio.lightTick(G.combo % 22);
-  if (G.combo % 3 === 0 || mult >= 2) popup(i, '+' + pts);
+  if (isTouch ? G.combo % 10 === 0 : (G.combo % 3 === 0 || mult >= 2)) popup(i, '+' + pts);
 }
 function updateDash(dt) {
   if (D.countdown > 0) {
@@ -1210,6 +1215,11 @@ canvas.addEventListener('touchmove', (e) => {
 }, { passive: true });
 canvas.addEventListener('touchend', () => touches.delete('pinch'));
 
+$('quests').addEventListener('pointerup', () => {
+  if (!isTouch) return;
+  S.settings.questsOpen = !S.settings.questsOpen;
+  renderQuests();
+});
 $('act-rocket').onclick = actRocket;
 $('act-anar').onclick = actAnar;
 $('act-float').onclick = actFloat;
@@ -1232,22 +1242,23 @@ function updateHUD() {
   $('target-fill').classList.toggle('done', G.phase !== 'play');
   $('lit-count').textContent = fmt(diyas.litCount);
   $('target-count').textContent = fmt(G.target);
-  $('zone-hint').textContent = G.target > diyas.unlockedEnd ? `⚠ Only ${fmt(diyas.unlockedEnd)} diyas unlocked — open a new ghat in the Bazaar!` : '';
+  $('night-mini').textContent = `${fmt(diyas.litCount)}/${fmt(G.target)}`;
+  $('zone-hint').textContent = G.target > diyas.unlockedEnd ? (isTouch ? '⚠ Unlock a new ghat 🛕' : `⚠ Only ${fmt(diyas.unlockedEnd)} diyas unlocked — open a new ghat in the Bazaar!`) : '';
   $('punya').textContent = fmt(S.punya);
   const ir = incomeRate();
   $('persec').textContent = `+${ir < 100 ? ir.toFixed(1) : fmt(ir)} /s` + (S.ashirwad ? ` · 🙏${S.ashirwad}` : '');
   let b = '';
-  if (G.utsavT > 0) b += `<span class="boost">🥁 Utsav x2 · ${Math.ceil(G.utsavT)}s</span>`;
-  if (G.lakshmiT > 0) b += `<span class="boost">🪙 Lakshmi x3 · ${Math.ceil(G.lakshmiT)}s</span>`;
+  if (G.utsavT > 0) b += `<span class="boost">🥁 x2 ${Math.ceil(G.utsavT)}s</span>`;
+  if (G.lakshmiT > 0) b += `<span class="boost">🪙 x3 ${Math.ceil(G.lakshmiT)}s</span>`;
   if (G.speedT > 0) b += `<span class="boost">⚡ ${Math.ceil(G.speedT)}s</span>`;
-  if (G.magnetT > 0) b += `<span class="boost">🪔 reach ${Math.ceil(G.magnetT)}s</span>`;
+  if (G.magnetT > 0) b += `<span class="boost">🪔 ${Math.ceil(G.magnetT)}s</span>`;
   if (G.doubleT > 0) b += `<span class="boost">✖2 ${Math.ceil(G.doubleT)}s</span>`;
-  if (up().bhajan) b += `<span class="boost">🎶 x${(1 + 0.25 * up().bhajan).toFixed(2)}</span>`;
+  if (up().bhajan && !isTouch) b += `<span class="boost">🎶 x${(1 + 0.25 * up().bhajan).toFixed(2)}</span>`;
   setHTML('boosts', b);
   const c = $('combo');
   if (G.combo >= 5 && G.time - G.lastLightT < 1.5) {
     c.classList.remove('hidden');
-    const txt = `🔥 ${G.combo} combo · x${comboMult().toFixed(2)}`;
+    const txt = isTouch ? `🔥${G.combo} ×${comboMult().toFixed(2)}` : `🔥 ${G.combo} combo · x${comboMult().toFixed(2)}`;
     if (c.textContent !== txt) { c.textContent = txt; c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump'); }
   } else c.classList.add('hidden');
   $('utsav-fill').style.width = (G.utsavT > 0 ? (G.utsavT / (15 + 4 * up().utsav)) : G.utsav) * 100 + '%';
@@ -1284,6 +1295,15 @@ const TUTORIAL = [
   [80, 'Celebrate! <kbd>F</kbd> fireworks · <kbd>G</kbd> anar', 'They fill the Utsav meter for double Punya'],
   [110, 'Walk down to the water and press <kbd>R</kbd>', 'to float a diya on the Sarayu 🪷'],
 ];
+const TUTORIAL_TOUCH = [
+  [0, '🕹️ Walk the ghat steps'],
+  [12, '🔥 Light diyas in a row'],
+  [30, '🛕 Bazaar: hire sevaks & more'],
+  [55, '🪔 Relight dimming diyas'],
+  [80, '🎆 Fireworks fill Utsav'],
+  [110, '🪷 Float diyas at the water'],
+];
+if (isTouch) TUTORIAL.splice(0, TUTORIAL.length, ...TUTORIAL_TOUCH);
 let tutT = 0;
 function updateTutorial(dt) {
   if (S.tutorial >= TUTORIAL.length) return;
