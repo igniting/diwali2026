@@ -33,16 +33,23 @@ Everything is made in code: the sandstone, rangoli, water, people, temple and mu
 
 It also works on phones, with an on-screen joystick, a run button and pinch to zoom.
 
-**The loop:** each night has a goal. Get that many diyas burning at the same time before the time runs out.
-Diyas burn down, the wind snuffs them out and naughty vanars knock them over. Light quickly in a row to build combos.
+**The loop:** each night has a goal. Reach it, then **hold** it while the Aarti meter fills. The meter drains whenever you fall below the goal.
+Diyas burn out in about 35 seconds, so you have to keep sweeping the rows. Relighting a dying diya pays 1.5×.
+Each night has three stars: ⭐ Aarti complete, ⭐ Quick (25% of the time left) and ⭐ Flawless (never fell below the goal). The later ghats need stars as well as Punya.
+Every night you win in a row adds +5% Punya, up to +50%, and failing a night resets the streak. Failing also lowers that night's goal by 7% on the next try, up to −21%.
+Things get harder as you go:
+- **Wind:** gusts are wider and more frequent each night.
+- **Vanars:** they get faster and arrive in packs from night 8.
+- **Storm nights:** every 5th night is an ⛈️ Aandhi (storm) night with gusts all night and double rewards.
+
 Spend your Punya ✦ on swifter hands, desi ghee for longer flames, sevaks who light diyas for you, Agni Chain flames that spread on their own, and new ghats.
-You'll also find seva tasks, 30 achievements, golden Lakshmi diyas, the Utsav meter (double Punya), daily prasad streaks, offline earnings from your sevaks, and an **Ashirwad** prestige from night 12.
+You'll also find seva tasks, achievements, power-ups, golden Lakshmi diyas, the Utsav meter (double Punya), daily prasad streaks, offline earnings from your sevaks, and an **Ashirwad** prestige from night 12.
 Progress saves automatically in your browser.
 
 ### ⚡ Deep Dash (competitive mode)
 
 Deep Dash is a 90-second race on the three ghats, and everyone gets the same stats.
-Each race is against a rival who lights diyas alongside you. Beat each one to climb a 7-rung ladder, from Nishad Raj up to Hanuman.
+Each race is against a rival who lights diyas alongside you. They start right beside you and race you for the same diyas. Beat each one to climb a 7-rung ladder, from Nishad Raj (about 7,000) up to Hanuman (about 31,000).
 - **Power-ups:** 🔥 Agni Blast, ⚡ Pavan Veg, 🪔 Lambi Jyoti, ✖️2 Dugna and ⏳ Samay.
 - **Hazards:** vanars and wind gusts that break your combo. Their timing comes from that day's seed, so everyone faces the same ones.
 - **Medals:** Kansya, Rajat, Swarna, Heera and Deepak Samrat. Your personal best and top-10 runs are recorded.

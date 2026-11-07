@@ -285,6 +285,7 @@ export class Monkey {
     this.pos = new THREE.Vector3();
     this.dir = new THREE.Vector2(1, 0);
     this.t = 0;
+    this.chaseSpeed = 5.6;
   }
   spawn(x, z, y) {
     this.active = true; this.mesh.visible = true;
@@ -297,7 +298,7 @@ export class Monkey {
     const toP = new THREE.Vector2(this.pos.x - player.pos.x, this.pos.z - player.pos.z);
     const pd = toP.length();
     let speed = 3.4;
-    if (pd < 7) { toP.normalize(); this.dir.lerp(toP, Math.min(1, dt * 3)).normalize(); speed = 5.6; }
+    if (pd < 7) { toP.normalize(); this.dir.lerp(toP, Math.min(1, dt * 3)).normalize(); speed = this.chaseSpeed; }
     else if (Math.random() < dt * 0.8) { const a = Math.random() * Math.PI * 2; this.dir.set(Math.cos(a), Math.sin(a)); }
     const nx = this.pos.x + this.dir.x * speed * dt, nz = this.pos.z + this.dir.y * speed * dt;
     if (world.isFree(nx, nz)) { this.pos.x = nx; this.pos.z = nz; }
@@ -307,7 +308,7 @@ export class Monkey {
     this.mesh.position.y += Math.abs(Math.sin(this.t * 14)) * 0.18;
     this.mesh.rotation.y = Math.atan2(this.dir.x, this.dir.y);
     this.limbs.forEach((l, i) => (l.rotation.x = Math.sin(this.t * 14 + (i % 2) * Math.PI) * 0.8));
-    const out = diyas.extinguishNear(this.pos.x, this.pos.z, 0.55, 0.9);
+    const out = diyas.extinguishNear(this.pos.x, this.pos.z, 0.8, 0.9);
     let caught = pd < 1.5;
     if (caught || this.t > this.life) {
       this.active = false; this.mesh.visible = false;

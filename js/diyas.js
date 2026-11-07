@@ -7,9 +7,9 @@ export const ZONES = [
   { name: 'Ram ki Paidi', hindi: 'राम की पैड़ी', cost: 0, center: [0, 5] },
   { name: 'Naya Ghat (East)', hindi: 'नया घाट', cost: 1500, center: [66, 5] },
   { name: 'Lakshman Ghat (West)', hindi: 'लक्ष्मण घाट', cost: 6000, center: [-66, 5] },
-  { name: 'Hanuman Garhi Marg', hindi: 'हनुमान गढ़ी मार्ग', cost: 25000, center: [0, 50] },
-  { name: 'Deep Mala Promenade', hindi: 'दीप माला', cost: 90000, center: [-40, 15] },
-  { name: 'Shri Ram Janmabhoomi Prangan', hindi: 'श्री राम जन्मभूमि', cost: 350000, center: [0, 110] },
+  { name: 'Hanuman Garhi Marg', hindi: 'हनुमान गढ़ी मार्ग', cost: 25000, center: [0, 50], stars: 12 },
+  { name: 'Deep Mala Promenade', hindi: 'दीप माला', cost: 90000, center: [-40, 15], stars: 24 },
+  { name: 'Shri Ram Janmabhoomi Prangan', hindi: 'श्री राम जन्मभूमि', cost: 350000, center: [0, 110], stars: 40 },
 ];
 
 const SPACING = 0.6;
@@ -145,7 +145,7 @@ export class DiyaSystem {
     this.zoneCount = ZONES.map((_, z) => Math.max(0, this.zoneEnd[z] - this.zoneStart[z]));
     this.unlockedEnd = 0;
     this.litCount = 0;
-    this.burnTime = 60;
+    this.burnTime = 35;
     this.chainChance = 0;
     this.chainQueue = [];
     this.onLit = null;

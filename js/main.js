@@ -26,9 +26,9 @@ const fmtTime = (s) => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padSt
 
 // ---------------------------------------------------------------- persistent state
 const UPGRADES = [
-  { id: 'speed', icon: '🙌', name: 'Swift Hands', hindi: 'फुर्ती', desc: '+1.5 diyas/sec lighting speed', base: 40, mult: 1.42, max: 80 },
+  { id: 'speed', icon: '🙌', name: 'Swift Hands', hindi: 'फुर्ती', desc: '+1.2 diyas/sec lighting speed', base: 40, mult: 1.5, max: 80 },
   { id: 'reach', icon: '🪔', name: 'Long Batti', hindi: 'लंबी बत्ती', desc: '+0.3 m lighting reach', base: 75, mult: 1.75, max: 12 },
-  { id: 'ghee', icon: '🧈', name: 'Pure Desi Ghee', hindi: 'शुद्ध घी', desc: '+12 s burn time for every diya', base: 100, mult: 1.5, max: 50 },
+  { id: 'ghee', icon: '🧈', name: 'Pure Desi Ghee', hindi: 'शुद्ध घी', desc: '+6 s burn time for every diya', base: 100, mult: 1.55, max: 50 },
   { id: 'sevak', icon: '🙋', name: 'Hire a Sevak', hindi: 'सेवक', desc: 'A volunteer who lights diyas for you', base: 220, mult: 1.38, max: 60 },
   { id: 'sevakTrain', icon: '📿', name: 'Sevak Training', hindi: 'प्रशिक्षण', desc: 'Sevaks light 30% faster & walk faster', base: 1200, mult: 1.7, max: 30 },
   { id: 'bhajan', icon: '🎶', name: 'Bhajan Mandali', hindi: 'भजन मंडली', desc: '+25% Punya from everything', base: 400, mult: 1.62, max: 60 },
@@ -69,6 +69,10 @@ const ACHIEVEMENTS = [
   ['ashirwad', '🙏', 'Ashirwad', 'Receive the blessings of Shri Ram (prestige)', (s) => s.prestiges >= 1, 0],
   ['hour', '⏳', 'Sachcha Bhakt', 'Play for one hour', (s) => s.playTime >= 3600, 10000],
   ['power20', '✨', 'Shakti', 'Grab 20 power-ups', (s) => s.powerups >= 20, 3000],
+  ['streak5', '🔥', 'Lagataar', 'Win 5 nights in a row', (s) => (s.bestStreak || 0) >= 5, 3000],
+  ['streak15', '☄️', 'Ajeya', 'Win 15 nights in a row', (s) => (s.bestStreak || 0) >= 15, 60000],
+  ['storm', '⛈️', 'Aandhi Vijay', 'Win a storm night', (s) => (s.storms || 0) >= 1, 5000],
+  ['flawless', '💎', 'Nirdosh', 'Win a night without ever falling below the goal', (s) => (s.flawlessWins || 0) >= 1, 1500],
   ['dash1', '⚡', 'Deep Dash', 'Finish your first Deep Dash', (s) => s.dash.played >= 1, 500],
   ['dashSilver', '🥈', 'Rajat Deep', 'Score 7,000 in Deep Dash', (s) => s.dash.best >= 7000, 2000],
   ['dashGold', '🥇', 'Swarna Deep', 'Score 12,000 in Deep Dash', (s) => s.dash.best >= 12000, 6000],
@@ -82,13 +86,13 @@ const ACHIEVEMENTS = [
 
 // Deep Dash: 90-second arcade sprint against a ladder of rivals
 const RIVALS = [
-  { name: 'Nishad Raj', target: 4500, cloth: 0x2a9d8f },
-  { name: 'Angad', target: 6500, cloth: 0x3a86ff },
-  { name: 'Shatrughan', target: 9000, cloth: 0x8338ec },
-  { name: 'Sugriv', target: 12000, cloth: 0x06d6a0 },
-  { name: 'Jambavan', target: 15500, cloth: 0x118ab2 },
-  { name: 'Bharat', target: 19500, cloth: 0x4361ee },
-  { name: 'Hanuman', target: 25000, cloth: 0xe85d04 },
+  { name: 'Nishad Raj', target: 7000, cloth: 0x2a9d8f },
+  { name: 'Angad', target: 10000, cloth: 0x3a86ff },
+  { name: 'Shatrughan', target: 13500, cloth: 0x8338ec },
+  { name: 'Sugriv', target: 17000, cloth: 0x06d6a0 },
+  { name: 'Jambavan', target: 21000, cloth: 0x118ab2 },
+  { name: 'Bharat', target: 25500, cloth: 0x4361ee },
+  { name: 'Hanuman', target: 31000, cloth: 0xe85d04 },
 ];
 const MEDALS = [
   [26000, '👑', 'Deepak Samrat'], [18000, '💎', 'Heera'], [12000, '🥇', 'Swarna'], [7000, '🥈', 'Rajat'], [3000, '🥉', 'Kansya'],
@@ -158,7 +162,8 @@ const player = new Player(scene, world);
 const audio = new AudioEngine();
 const fx = new Effects(scene, audio, camera);
 fx.setPixelRatio(pr);
-const monkey = new Monkey(scene);
+const monkeys = [new Monkey(scene), new Monkey(scene), new Monkey(scene)];
+const monkey = monkeys[0]; // Deep Dash uses a single vanar
 const powerups = new PowerUps(scene);
 let sevaks = [];
 let frameNo = 0;
@@ -212,13 +217,14 @@ addEventListener('resize', () => {
 // ---------------------------------------------------------------- derived stats
 const up = () => S.up;
 function multiplier() {
-  return (1 + 0.25 * up().bhajan) * (1 + 0.1 * S.ashirwad) * (G.utsavT > 0 ? 2 : 1) * (G.lakshmiT > 0 ? 3 : 1) * (G.doubleT > 0 ? 2 : 1);
+  return (1 + 0.25 * up().bhajan) * (1 + 0.1 * S.ashirwad) * (G.utsavT > 0 ? 2 : 1) * (G.lakshmiT > 0 ? 3 : 1) * (G.doubleT > 0 ? 2 : 1) * streakMult();
 }
+function streakMult() { return 1 + Math.min(0.5, 0.05 * (S.winStreak || 0)); }
 function incomeRate() { return (diyas.litCount * 0.1 + G.floating * 0.6) * multiplier(); }
 function applyStats() {
-  player.lightRate = (4 + 1.5 * up().speed) * (1 + 0.03 * S.ashirwad);
+  player.lightRate = (4 + 1.2 * up().speed) * (1 + 0.03 * S.ashirwad);
   player.reach = 1.6 + 0.3 * up().reach;
-  diyas.burnTime = 60 + 12 * up().ghee;
+  diyas.burnTime = 35 + 6 * up().ghee;
   diyas.chainChance = 0.04 * up().agni;
   diyas.setUnlockedZones(S.zones);
   syncSevaks();
@@ -226,16 +232,22 @@ function applyStats() {
 function sevakRate() { return 1.2 * (1 + 0.3 * up().sevakTrain); }
 function sevakSpeed() { return 2.6 * (1 + 0.05 * up().sevakTrain); }
 function upgradeCost(u) { return Math.floor(u.base * Math.pow(u.mult, S.up[u.id])); }
-function nightTarget(n) {
+const GROWTH = 1.32;
+function mercy(n) { return S.mercy && S.mercy.night === n ? Math.min(3, S.mercy.fails) : 0; }
+function nightTarget(n, withMercy = true) {
   const all = diyas.count;
-  return Math.min(Math.round(60 * Math.pow(1.28, n - 1)), Math.round(all * 0.9));
+  const t = Math.min(Math.round(60 * Math.pow(GROWTH, n - 1)), Math.round(all * 0.9));
+  return Math.round(t * (withMercy ? 1 - 0.07 * mercy(n) : 1));
 }
 function nightDuration(n) {
-  const base = Math.min(300, 150 + 6 * n);
-  const capped = Math.round(60 * Math.pow(1.28, n - 1)) > diyas.count * 0.9;
-  return capped ? Math.max(150, base - (n - 20) * 5) : base;
+  const base = Math.min(180, 100 + 4 * n);
+  const capped = Math.round(60 * Math.pow(GROWTH, n - 1)) > diyas.count * 0.9;
+  return capped ? Math.max(120, base - (n - 18) * 3) : base;
 }
-function windChance() { return Math.min(0.7, 0.18 + 0.025 * S.night) * (1 - 0.1 * up().aanchal); }
+const holdTime = (n) => (n <= 3 ? 10 : Math.min(20, 12 + n * 0.4));
+const isStorm = (n) => n % 5 === 0;
+function windChance() { return Math.min(0.85, 0.3 + 0.03 * S.night) * (1 - 0.1 * up().aanchal); }
+const totalStars = () => Object.values(S.nightStars).reduce((a, b) => a + b, 0);
 
 function syncSevaks() {
   const want = up().sevak;
@@ -269,13 +281,13 @@ diyas.onLit = (i, source, isNew) => {
   if (G.phase === 'dash') { dashOnLit(i, source, isNew); return; }
   const mult = multiplier();
   if (source === 'player') {
-    if (G.time - G.lastLightT < 1.5) G.combo++; else G.combo = 1;
+    if (G.time - G.lastLightT < 1.0) G.combo++; else G.combo = 1;
     G.lastLightT = G.time;
     comboCallout(G.combo);
     S.maxCombo = Math.max(S.maxCombo, G.combo);
     questProgress('combo', G.combo, false);
     const cm = comboMult();
-    const gain = (isNew ? 1 : 0.5) * cm * mult;
+    const gain = (isNew ? 1 : 1.5) * cm * mult; // relighting a dying diya is worth more
     addPunya(gain);
     audio.lightTick(G.combo % 22);
     G.utsav = Math.min(1, G.utsav + (G.utsavT > 0 ? 0 : 0.0016 * (1 + 0.15 * up().utsav)));
@@ -421,20 +433,32 @@ function startNight(n) {
   G.timeLeft = nightDuration(n);
   G.duration = G.timeLeft;
   G.nightLit = 0; G.nightPunya = 0; G.combo = 0;
-  G.nextGust = n >= 2 ? 18 + Math.random() * 15 : 1e9;
-  G.nextMonkey = n >= 3 ? 35 + Math.random() * 30 : 1e9;
+  G.aarti = 0; G.reached = false; G.dropped = false; G.aartiBell = 0;
+  G.hold = holdTime(n);
+  G.storm = isStorm(n);
+  G.nextGust = G.storm ? 6 : n >= 2 ? 15 + Math.random() * 12 : 1e9;
+  G.nextMonkey = n >= 3 ? 25 + Math.random() * 20 : 1e9;
   G.nextGolden = 25 + Math.random() * 40;
   sevaks.forEach((s) => { s.target = -1; });
-  banner(`रात ${n} · Night ${n}`, isTouch ? `🎯 Light ${fmt(G.target)} diyas` : `Light <b>${fmt(G.target)}</b> diyas so the Pushpak Vimana can find Ayodhya`, false, 4.5, true);
+  const m = mercy(n);
+  if (G.storm) banner(`⛈️ आंधी रात · Storm Night ${n}`, isTouch ? `🎯 Hold ${fmt(G.target)} · double reward` : `Fierce winds all night. Hold <b>${fmt(G.target)}</b> diyas for the Aarti — double reward!`, true, 5, true);
+  else banner(`रात ${n} · Night ${n}`, isTouch ? `🎯 Hold ${fmt(G.target)} diyas` : `Keep <b>${fmt(G.target)}</b> diyas burning for ${Math.round(G.hold)} s to call the Aarti${m ? ` · mercy −${m * 7}%` : ''}`, false, 4.5, true);
   audio.bell(660, 0.3); audio.bell(990, 0.2, 0.4);
   save();
 }
 function winNight() {
   G.phase = 'won'; G.wonT = 0;
   const frac = G.timeLeft / G.duration;
-  const stars = frac > 0.45 ? 3 : frac > 0.2 ? 2 : 1;
+  G.quick = frac >= 0.25;
+  G.flawless = !G.dropped;
+  const stars = 1 + (G.quick ? 1 : 0) + (G.flawless ? 1 : 0);
   G.stars = stars;
-  const reward = Math.round((G.target * 3 + incomeRate() * 25) * (1 + (stars - 1) * 0.5));
+  S.winStreak = (S.winStreak || 0) + 1;
+  S.bestStreak = Math.max(S.bestStreak || 0, S.winStreak);
+  S.mercy = null;
+  if (G.storm) S.storms = (S.storms || 0) + 1;
+  if (G.flawless) S.flawlessWins = (S.flawlessWins || 0) + 1;
+  const reward = Math.round((G.target * 3 + incomeRate() * 25) * (1 + (stars - 1) * 0.5) * (G.storm ? 2 : 1));
   G.reward = reward;
   S.punya += reward; S.lifetime += reward;
   S.nightStars[S.night] = Math.max(S.nightStars[S.night] || 0, stars);
@@ -451,6 +475,9 @@ function winNight() {
 }
 function loseNight() {
   G.phase = 'lost';
+  G.lostStreak = S.winStreak || 0;
+  S.winStreak = 0;
+  S.mercy = { night: S.night, fails: (S.mercy && S.mercy.night === S.night ? S.mercy.fails : 0) + 1 };
   showSummary(false);
 }
 function showSummary(won) {
@@ -461,7 +488,9 @@ function showSummary(won) {
     <div class="sum-title">शुभ दीपावली!</div>
     <div class="sum-sub">Night ${n} complete — Ayodhya glows for Shri Ram</div>
     <div class="stars">${[1, 2, 3].map((k) => `<span class="${k <= st ? '' : 'off'}">⭐</span>`).join('')}</div>
+    <div class="star-goals"><span class="on">⭐ Aarti complete</span><span class="${G.quick ? 'on' : ''}">⭐ Quick: 25% time left</span><span class="${G.flawless ? 'on' : ''}">⭐ Flawless: never fell below the goal</span></div>
     <div class="sum-rows">
+      <div>Win streak</div><div>🔥 ${S.winStreak} · +${Math.round((streakMult() - 1) * 100)}% Punya</div>
       <div>Diyas lit tonight</div><div>${fmt(G.nightLit)}</div>
       <div>Time remaining</div><div>${fmtTime(G.timeLeft)}</div>
       <div>Punya earned tonight</div><div>${fmt(G.nightPunya)} ✦</div>
@@ -470,12 +499,12 @@ function showSummary(won) {
     </div>
     ${nightTarget(n + 1) > diyas.unlockedEnd * 0.8 ? `<div class="note">🔓 Tip: the next goal is big — unlock a new ghat in the Bazaar.</div>` : ''}` : `
     <div class="sum-title">The night grows late…</div>
-    <div class="sum-sub">Only ${fmt(diyas.litCount)} of ${fmt(G.target)} diyas were burning when time ran out.</div>
+    <div class="sum-sub">The Aarti reached ${Math.round(G.aarti * 100)}% before time ran out.${G.lostStreak ? ` Your 🔥${G.lostStreak} win streak is broken.` : ''}</div>
     <div class="sum-rows">
       <div>Diyas lit tonight</div><div>${fmt(G.nightLit)}</div>
       <div>Punya earned tonight</div><div>${fmt(G.nightPunya)} ✦</div>
     </div>
-    <div class="note">Visit the Bazaar: hire sevaks, buy ghee for longer flames, or get swifter hands. Then try again!</div>`;
+    <div class="note">Tip: sweep the rows in loops and relight dimming diyas before they die. Ghee and sevaks help you hold. Next try: goal −${Math.min(3, S.mercy.fails) * 7}%.</div>`;
   $('btn-next').textContent = won ? `Night ${n + 1} ➜` : 'Try Again ↻';
   $('btn-next').onclick = () => {
     $('summary').classList.add('hidden');
@@ -563,7 +592,8 @@ function renderShop() {
         <div class="info"><div class="nm">${z.name}<small>${z.hindi}</small></div>
           <div class="ds">${fmt(diyas.zoneCount[k])} diyas${owned ? ' · unlocked' : ''}</div></div>
         ${owned ? `<button class="btn buy" data-tp="${k}">Go there</button>` :
-          next ? `<button class="btn ${S.punya >= z.cost ? 'primary' : ''} buy" data-zone="${k}" ${S.punya < z.cost ? 'disabled' : ''}>✦ ${fmt(z.cost)}</button>` :
+          next && totalStars() < (z.stars || 0) ? `<button class="btn buy" disabled>⭐ ${totalStars()}/${z.stars}</button>` :
+          next ? `<button class="btn ${S.punya >= z.cost ? 'primary' : ''} buy" data-zone="${k}" ${S.punya < z.cost ? 'disabled' : ''}>✦ ${fmt(z.cost)}${z.stars ? ` · ⭐${z.stars}` : ''}</button>` :
             `<button class="btn buy" disabled>🔒</button>`}
       </div>`;
     }).join('') + `</div><div class="note">Total diyas in Ayodhya: ${fmt(diyas.count)} · unlocked: ${fmt(diyas.unlockedEnd)}</div>`;
@@ -676,7 +706,7 @@ function buyUpgrade(id) {
 }
 function buyZone(k) {
   const z = ZONES[k];
-  if (k !== S.zones || S.punya < z.cost) return;
+  if (k !== S.zones || S.punya < z.cost || totalStars() < (z.stars || 0)) return;
   S.punya -= z.cost;
   S.zones++;
   applyStats();
@@ -715,7 +745,7 @@ function updateEvents(dt) {
     const i = s + ((Math.random() * n) | 0);
     G.gust = { t: -3, dir, x: diyas.pos[i * 3], z: diyas.pos[i * 3 + 2], done: false };
     banner('🌬️ हवा! A gust of wind is coming', `${dir > 0 ? 'From the west' : 'From the east'} — near ${ZONES[zoneK].name}. Relight quickly!`, true, 3);
-    G.nextGust = Math.max(12, (40 + Math.random() * 25) / (1 + S.night * 0.04));
+    G.nextGust = G.storm ? 7 + Math.random() * 4 : Math.max(9, (35 + Math.random() * 20) / (1 + S.night * 0.06));
   }
   if (G.gust) {
     const g = G.gust;
@@ -725,7 +755,7 @@ function updateEvents(dt) {
       audio.wind(4);
       const zmin = g.z < 22 ? 0 : g.z - 25, zmax = g.z < 22 ? 21 : g.z + 25;
       fx.windStreaks(g.x, zmin, zmax, g.dir);
-      const out = diyas.gust(g.x, 22, zmin, zmax, windChance());
+      const out = diyas.gust(g.x, Math.min(40, 18 + S.night * 0.8) * (G.storm ? 1.3 : 1), zmin, zmax, Math.min(0.9, windChance() * (G.storm ? 1.2 : 1)));
       if (out > 0) setTimeout(() => toast(`🌬️ The wind snuffed out <b>${fmt(out)}</b> diyas`, null), 600);
     }
     const env = g.t > 0 ? Math.max(0, Math.sin(Math.min(1, g.t / 4) * Math.PI)) : Math.max(0, (g.t + 3) / 3) * 0.15;
@@ -734,34 +764,43 @@ function updateEvents(dt) {
   } else {
     G.windVec.set(Math.sin(G.time * 0.3) * 0.08, 0, Math.cos(G.time * 0.21) * 0.05);
   }
-  // vanar
+  // vanars: more of them, and faster, as the nights go on
   G.nextMonkey -= dt;
-  if (G.nextMonkey <= 0 && !monkey.active) {
-    let i = -1;
-    for (let k = 0; k < 40; k++) {
-      const j = (Math.random() * diyas.unlockedEnd) | 0;
-      if (diyas.lit[j] && diyas.zone[j] !== 5) { i = j; break; }
+  if (G.nextMonkey <= 0 && !monkeys.some((m) => m.active)) {
+    const n = S.night;
+    const count = n >= 14 ? 3 : n >= 8 ? 2 : 1;
+    let spawned = 0;
+    for (let c = 0; c < count; c++) {
+      let i = -1;
+      for (let k = 0; k < 40; k++) {
+        const j = (Math.random() * diyas.unlockedEnd) | 0;
+        if (diyas.lit[j] && diyas.zone[j] !== 5) { i = j; break; }
+      }
+      if (i < 0) continue;
+      const m = monkeys[c];
+      m.chaseSpeed = Math.min(7.6, 5.6 + n * 0.15);
+      m.spawn(diyas.pos[i * 3], diyas.pos[i * 3 + 2], diyas.pos[i * 3 + 1]);
+      spawned++;
     }
-    if (i >= 0) {
-      const x = diyas.pos[i * 3], z = diyas.pos[i * 3 + 2];
-      monkey.spawn(x, z, diyas.pos[i * 3 + 1]);
+    if (spawned) {
       audio.monkey();
-      banner('🐒 Shararati vanar!', 'A naughty monkey is snuffing diyas — chase it down!', true, 3);
+      banner(spawned > 1 ? `🐒 ${spawned} Shararati vanars!` : '🐒 Shararati vanar!', 'Naughty monkeys are snuffing diyas — chase them down!', true, 3);
     }
-    G.nextMonkey = 60 + Math.random() * 50;
+    G.nextMonkey = Math.max(15, (45 + Math.random() * 25) / (1 + n * 0.05));
   }
-  if (monkey.active) {
-    const r = monkey.update(dt, world, diyas, player);
-    if (Math.random() < dt * 0.6) audio.monkey();
+  for (const m of monkeys) {
+    if (!m.active) continue;
+    const r = m.update(dt, world, diyas, player);
+    if (Math.random() < dt * 0.5) audio.monkey();
     if (r.caught) {
       const reward = Math.round(100 + incomeRate() * 45);
       S.punya += reward; S.lifetime += reward; S.monkeys++;
       questProgress('monkey', 1, true);
       banner(isTouch ? `🐒 +${fmt(reward)} ✦` : '🐒 Pakad liya!', `The vanar drops a laddoo — +${fmt(reward)} ✦`, false, 2.5);
-      audio.coin();
+      audio.coin(); vibrate(40);
       checkAchievements();
     } else if (r.escaped) {
-      toast('🐒 The vanar escaped into the trees…', null);
+      toast('🐒 A vanar escaped into the trees…', null);
     }
   }
   // golden diya
@@ -914,7 +953,7 @@ function startDash(challenge = null) {
   ];
   G.phase = 'dash';
   G.gust = null; G.windVec.set(0, 0, 0);
-  monkey.active = false; monkey.mesh.visible = false;
+  monkeys.forEach((m) => { m.active = false; m.mesh.visible = false; });
   fx.golden.visible = false;
   powerups.clear();
   G.combo = 0; G.speedT = G.magnetT = G.doubleT = 0;
@@ -935,7 +974,7 @@ function startDash(challenge = null) {
   const rangeEnd = diyas.zoneEnd[2];
   D.rival = new Sevak(scene, world, diyas, 0, 3, { source: 'rival', range: [0, rangeEnd], cloth: info.cloth });
   D.rival.mesh.scale.setScalar(1.05);
-  D.rival.pos.set(D.rng() < 0.5 ? -40 : 40, 0, 4.5);
+  D.rival.pos.set((D.rng() < 0.5 ? -1 : 1) * (6 + D.rng() * 6), 0, 4.5); // right beside you: fight for the same rows
   D.rival.pos.y = world.heightAt(D.rival.pos.x, 4.5);
   D.rivalRate = info.target / 20 / (DASH_TIME - 4);
   document.body.classList.add('dash');
@@ -947,7 +986,7 @@ function startDash(challenge = null) {
 function dashOnLit(i, source, isNew) {
   if (isNew) S.totalLit++;
   if (source === 'rival') { D.rivalScore += isNew ? 20 : 10; return; }
-  if (G.time - G.lastLightT < 1.5) G.combo++; else G.combo = 1;
+  if (G.time - G.lastLightT < 1.0) G.combo++; else G.combo = 1;
   G.lastLightT = G.time;
   comboCallout(G.combo);
   D.maxCombo = Math.max(D.maxCombo, G.combo);
@@ -1243,6 +1282,12 @@ function updateHUD() {
   $('lit-count').textContent = fmt(diyas.litCount);
   $('target-count').textContent = fmt(G.target);
   $('night-mini').textContent = `${fmt(diyas.litCount)}/${fmt(G.target)}`;
+  const holding = G.phase === 'play' && diyas.litCount >= G.target;
+  $('aarti-fill').style.width = (G.phase === 'play' ? G.aarti : G.phase === 'won' || G.phase === 'summary' ? 1 : 0) * 100 + '%';
+  const st = G.phase !== 'play' ? '' : holding ? '🔔 HOLD!' : G.reached ? '⚠ Below goal!' : `Reach ${fmt(G.target)}`;
+  $('aarti-state').textContent = st;
+  $('aarti-row').classList.toggle('holding', holding);
+  $('aarti-row').classList.toggle('falling', G.phase === 'play' && !holding && G.reached);
   $('zone-hint').textContent = G.target > diyas.unlockedEnd ? (isTouch ? '⚠ Unlock a new ghat 🛕' : `⚠ Only ${fmt(diyas.unlockedEnd)} diyas unlocked — open a new ghat in the Bazaar!`) : '';
   $('punya').textContent = fmt(S.punya);
   const ir = incomeRate();
@@ -1253,10 +1298,11 @@ function updateHUD() {
   if (G.speedT > 0) b += `<span class="boost">⚡ ${Math.ceil(G.speedT)}s</span>`;
   if (G.magnetT > 0) b += `<span class="boost">🪔 ${Math.ceil(G.magnetT)}s</span>`;
   if (G.doubleT > 0) b += `<span class="boost">✖2 ${Math.ceil(G.doubleT)}s</span>`;
+  if (S.winStreak) b += `<span class="boost">🔥${S.winStreak} +${Math.round((streakMult() - 1) * 100)}%</span>`;
   if (up().bhajan && !isTouch) b += `<span class="boost">🎶 x${(1 + 0.25 * up().bhajan).toFixed(2)}</span>`;
   setHTML('boosts', b);
   const c = $('combo');
-  if (G.combo >= 5 && G.time - G.lastLightT < 1.5) {
+  if (G.combo >= 5 && G.time - G.lastLightT < 1.0) {
     c.classList.remove('hidden');
     const txt = isTouch ? `🔥${G.combo} ×${comboMult().toFixed(2)}` : `🔥 ${G.combo} combo · x${comboMult().toFixed(2)}`;
     if (c.textContent !== txt) { c.textContent = txt; c.classList.remove('bump'); void c.offsetWidth; c.classList.add('bump'); }
@@ -1269,7 +1315,7 @@ function updateHUD() {
   $('act-rocket').classList.toggle('disabled', S.punya < costRocket());
   $('act-anar').classList.toggle('disabled', S.punya < costAnar());
   $('act-float').classList.toggle('disabled', S.punya < costFloat() || player.pos.z > 2.6);
-  const canBuy = UPGRADES.some((u) => S.up[u.id] < u.max && S.punya >= upgradeCost(u)) || (S.zones < ZONES.length && S.punya >= ZONES[S.zones].cost);
+  const canBuy = UPGRADES.some((u) => S.up[u.id] < u.max && S.punya >= upgradeCost(u)) || (S.zones < ZONES.length && S.punya >= ZONES[S.zones].cost && totalStars() >= (ZONES[S.zones].stars || 0));
   $('act-shop').classList.toggle('can-buy', canBuy);
   $('stamina').classList.toggle('show', player.stamina < 0.99);
   $('stamina-fill').style.width = player.stamina * 100 + '%';
@@ -1414,7 +1460,16 @@ function frame() {
     updateTutorial(dt);
     if (G.phase === 'play') {
       G.timeLeft -= dt;
-      if (diyas.litCount >= G.target) winNight();
+      if (diyas.litCount >= G.target) {
+        if (!G.reached) { G.reached = true; audio.bell(990, 0.3); banner('🔔 Hold it!', 'The Aarti has begun. Keep the diyas burning!', false, 2); }
+        G.aarti = Math.min(1, G.aarti + dt / G.hold);
+        const q = Math.floor(G.aarti * 4);
+        if (q > G.aartiBell) { G.aartiBell = q; audio.bell(660 + q * 110, 0.25); }
+      } else if (G.reached && G.aarti > 0) {
+        G.aarti = Math.max(0, G.aarti - dt / (G.hold * 1.5));
+        if (!G.dropped) { G.dropped = true; vibrate(80); }
+      }
+      if (G.aarti >= 1) winNight();
       else if (G.timeLeft <= 0) loseNight();
     } else if (G.phase === 'won') {
       G.wonT += dt;
@@ -1491,7 +1546,7 @@ function enterGame() {
 function begin() {
   enterGame();
   diyas.resetAll();
-  monkey.active = false;
+  monkeys.forEach((m) => { m.active = false; m.mesh.visible = false; });
   player.pos.set(0, world.heightAt(0, 7.8), 7.8);
   player.y = player.pos.y;
   G.cam.yaw = 0; G.cam.pitch = 0.42;
