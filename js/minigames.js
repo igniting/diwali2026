@@ -207,7 +207,11 @@ class Yatra {
     this.sparks = new Sparks();
     this.shake = 0; this.state = 'intro'; this.introT = 2.2;
     this.trail = [];
-    m.help(window.matchMedia('(pointer: coarse)').matches ? '👆 <b>Hold</b> anywhere to rise · release to glide down' : '<b>Hold Space</b> / mouse to rise · release to glide down', 4000);
+    this.jyoti = 1;      // the Vimana's light: drains constantly, refilled by rings of lamps
+    this.avgY = 50;      // where the player has been flying lately (clouds hunt campers)
+    this.ceilT = 0;
+    this.lowBeep = 0;
+    m.help((window.matchMedia('(pointer: coarse)').matches ? '👆 <b>Hold</b> to rise · release to glide' : '<b>Hold Space</b> / mouse to rise · release to glide') + '<br>🪔 Fly through rings to keep the Vimana\'s light burning!', 5000);
   }
   get u() { return this.m.H / 100; }
   speed() { return 34 + 26 * (this.dist / this.total); }
@@ -224,7 +228,8 @@ class Yatra {
       // marigold trail leading into the ring
       for (let i = 1; i <= 4; i++) this.objs.push({ k: 'gold', x: x - i * 7, y: y + Math.sin(i) * 3 });
     } else if (r < 0.5 + 0.25 + 0.15 * prog || prog < 0.2) {
-      const y = rnd(10, 90);
+      // clouds hunt players who sit at one altitude
+      const y = Math.random() < (this.campT > 3 ? 0.65 : 0.12) ? clamp(this.avgY + rnd(-4, 4), 8, 92) : rnd(10, 90);
       this.objs.push({ k: 'cloud', x: x + 5, y, w: rnd(16, 24), h: rnd(9, 13), vy: rnd(-8, 8) * prog, ph: Math.random() * 6 });
     } else {
       const fromTop = Math.random() < 0.5;
@@ -234,7 +239,7 @@ class Yatra {
   }
   hit() {
     if (this.inv > 0) return;
-    this.lives--; this.inv = 1.6; this.shake = 0.5; this.combo = 0;
+    this.lives--; this.inv = 2.0; this.shake = 0.5; this.combo = 0;
     this.a.boom?.(25);
     try { navigator.vibrate?.(120); } catch (e) { /* noop */ }
     if (this.lives <= 0) { this.state = 'crash'; this.endT = 1.4; }
@@ -270,6 +275,14 @@ class Yatra {
     this.vy = clamp(this.vy, -55, 60);
     this.y += this.vy * dt;
     if (this.y < 5) { this.y = 5; this.vy = Math.max(0, this.vy); }
+    // storm ceiling: lingering in the thunderclouds at the top hurts
+    if (this.y < 10) { this.ceilT += dt; if (this.ceilT > 0.6) { this.ceilT = 0; this.hit(); this.vy = 30; } } else this.ceilT = Math.max(0, this.ceilT - dt);
+    this.avgY += (this.y - this.avgY) * Math.min(1, dt / 3);
+    this.campT = Math.abs(this.y - this.avgY) < 6 ? (this.campT || 0) + dt : Math.max(0, (this.campT || 0) - dt * 2);
+    // the light drains; rings and marigolds refill it
+    this.jyoti -= dt * 0.03;
+    if (this.jyoti < 0.25) { this.lowBeep -= dt; if (this.lowBeep <= 0) { this.lowBeep = 0.8; this.a.bell?.(330, 0.12); } }
+    if (this.jyoti <= 0) { this.jyoti = 0; this.state = 'crash'; this.dark = true; this.endT = 1.6; this.a.boom?.(40); return; }
     if (this.y > 92) { this.y = 92; this.vy = -25; } // skim the river: a soft bounce, no penalty
     this.score += sp * dt * 0.5;
     if (this.dist > this.nextSpawn && this.dist < this.total - 160) this.spawn();
@@ -282,6 +295,7 @@ class Yatra {
         o.done = true;
         if (Math.abs(this.y - o.y) < o.r) {
           this.combo++; this.rings++;
+          this.jyoti = Math.min(1, this.jyoti + 0.22);
           const pts = 100 * Math.min(5, 1 + Math.floor(this.combo / 3));
           this.score += pts;
           this.a.lightTick?.(this.combo);
@@ -292,6 +306,7 @@ class Yatra {
       }
       if (o.k === 'gold' && !o.done && Math.abs(dx) < 3 && Math.abs(o.y - this.y) < 5) {
         o.done = true; this.marigolds++; this.score += 15;
+        this.jyoti = Math.min(1, this.jyoti + 0.012);
         if (this.marigolds % 20 === 0 && this.lives < 3) { this.lives++; this.a.bell?.(1320, 0.25); this.pop = { t: this.t, text: '+1 🪔', y: this.y }; }
         this.sparks.burst(this.sx(o.x), o.y * this.u, 8, ['#ff9a00', '#ffc300'], 90, 0.5, 60);
       }
@@ -318,9 +333,9 @@ class Yatra {
   end(won) {
     this.m.finish({
       score: Math.round(this.score), won,
-      title: won ? 'अयोध्या आगमन!' : 'The storm was too strong…',
-      sub: won ? 'The Pushpak Vimana landed safely in Ayodhya' : `You flew ${Math.round((this.dist / this.total) * 100)}% of the way home`,
+      title: won ? 'अयोध्या आगमन!' : this.dark ? 'The light went out…' : 'The storm was too strong…',
       grade: won ? (this.lives === 3 ? '🏆 Flawless flight' : '✈️ Safe landing') : '',
+      sub: won ? 'The Pushpak Vimana landed safely in Ayodhya' : this.dark ? `Fly through rings of lamps to keep the Vimana glowing · ${Math.round((this.dist / this.total) * 100)}% of the way home` : `You flew ${Math.round((this.dist / this.total) * 100)}% of the way home`,
       rows: [['Rings of light', `${this.rings} / ${this.ringsTotal}`], ['Marigolds', this.marigolds], ['Lamps (lives) left', this.lives]],
     });
   }
@@ -401,6 +416,13 @@ class Yatra {
         }
       }
     }
+    // storm ceiling
+    const band = 10 * u;
+    const sg = ctx.createLinearGradient(0, 0, 0, band * 1.6);
+    sg.addColorStop(0, 'rgba(25,20,45,0.97)'); sg.addColorStop(0.6, 'rgba(45,38,70,0.8)'); sg.addColorStop(1, 'rgba(45,38,70,0)');
+    ctx.fillStyle = sg; ctx.fillRect(0, 0, W, band * 1.6);
+    for (let k = 0; k < 9; k++) { const bx = ((k * 157 - this.dist * u * 0.9) % (W + 120) + W + 120) % (W + 120) - 60; ctx.fillStyle = '#2f2848'; ctx.beginPath(); ctx.ellipse(bx, band * 0.55, 70, band * 0.55, 0, 0, TAU); ctx.fill(); }
+    if (Math.sin(t * 7.3) > 0.9 || this.ceilT > 0.3) { ctx.strokeStyle = 'rgba(200,220,255,0.8)'; ctx.lineWidth = 2; const lx = (t * 397) % W; ctx.beginPath(); ctx.moveTo(lx, 0); for (let k = 1; k < 5; k++) ctx.lineTo(lx + Math.sin(k * 3 + t * 30) * 12, band * k / 4); ctx.stroke(); }
     // trail
     ctx.save(); ctx.globalCompositeOperation = 'lighter';
     this.trail.forEach(([wx, wy], i) => { ctx.globalAlpha = i / this.trail.length * 0.5; ctx.fillStyle = '#ffb347'; ctx.beginPath(); ctx.arc(this.sx(wx) - 3 * u, wy * u + 1.5 * u, (i / this.trail.length) * u * 0.9, 0, TAU); ctx.fill(); });
@@ -413,6 +435,15 @@ class Yatra {
       ctx.fillText(this.pop.text, W * 0.25, this.pop.y * u - (t - this.pop.t) * 40 - u * 5);
       ctx.globalAlpha = 1;
     }
+    // jyoti meter
+    const jx = 16, jy = 54, jw = Math.min(200, W * 0.35), low = this.jyoti < 0.25;
+    ctx.fillStyle = 'rgba(0,0,0,0.45)'; ctx.fillRect(jx - 2, jy - 2, jw + 4, 12);
+    const jg = ctx.createLinearGradient(jx, 0, jx + jw, 0);
+    jg.addColorStop(0, low ? '#ff4b2b' : '#ff8a00'); jg.addColorStop(1, low ? '#ff9a7a' : '#fff1b0');
+    ctx.fillStyle = jg; ctx.globalAlpha = low ? 0.55 + 0.45 * Math.sin(t * 14) : 1;
+    ctx.fillRect(jx, jy, jw * this.jyoti, 8); ctx.globalAlpha = 1;
+    ctx.font = '12px Poppins, sans-serif'; ctx.textAlign = 'left'; ctx.fillStyle = low ? '#ff9a7a' : '#ffe8c4';
+    ctx.fillText(low ? '🪔 Light fading — find a ring!' : '🪔 Jyoti', jx, jy + 24);
     // progress: Lanka → Ayodhya
     const bw = Math.min(420, W * 0.6), bx = (W - bw) / 2, by = H - 22;
     ctx.fillStyle = 'rgba(255,255,255,0.12)'; ctx.fillRect(bx, by, bw, 6);
@@ -429,7 +460,7 @@ class Yatra {
     const s = u * 1.15, blink = this.inv > 0 && Math.floor(this.t * 12) % 2 === 0;
     if (blink) return;
     ctx.save(); ctx.translate(x, y); ctx.rotate(clamp(this.vy / 220, -0.25, 0.3));
-    ctx.save(); ctx.globalCompositeOperation = 'lighter'; glow(ctx, 0, 0, s * 9, 'rgba(255,190,90,A)', 0.35); ctx.restore();
+    ctx.save(); ctx.globalCompositeOperation = 'lighter'; glow(ctx, 0, 0, s * 9 * (0.4 + 0.6 * this.jyoti), 'rgba(255,190,90,A)', 0.35); ctx.restore();
     // hull
     const g = ctx.createLinearGradient(0, -s, 0, s * 2);
     g.addColorStop(0, '#ffe08a'); g.addColorStop(1, '#b8740e');
