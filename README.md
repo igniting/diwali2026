@@ -41,9 +41,10 @@ Progress saves automatically in your browser.
 
 ## Hosting on GitHub Pages
 
-1. Open **Settings → Pages** in this repository.
-2. Under *Build and deployment*, set **Source** to *Deploy from a branch*, then pick **`main`** and **`/ (root)`**, and click **Save**.
-3. After a minute the game is live at `https://<user>.github.io/diwali2026/`.
+A GitHub Actions workflow (`.github/workflows/pages.yml`) publishes the site on every push to `main`.
+
+One-time setup: open **Settings → Pages** and set **Source** to **GitHub Actions**. After that, each push to `main`
+deploys to `https://<user>.github.io/diwali2026/`. You can also re-run it by hand from the **Actions** tab (*Deploy to GitHub Pages → Run workflow*).
 
 To run it locally, serve the folder with any static server, for example `python3 -m http.server`, then open http://localhost:8000.
 
