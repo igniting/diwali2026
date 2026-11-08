@@ -185,6 +185,7 @@ export class Effects {
     const flash = (int) => {
       const f = this.flashes.find(f => f.t <= 0) || this.flashes[0];
       f.light.position.set(x, y, z);
+      int *= Math.min(1, (this._dist(x, y, z) / 60) ** 2);
       f.light.color.setRGB(c1[0], c1[1], c1[2]);
       f.base = int; f.t = 1;
     };
@@ -196,7 +197,7 @@ export class Effects {
       }
       return;
     }
-    flash(type === 'willow' ? 9000 : 14000);
+    flash(type === 'willow' ? 1200 : 1800);
     this.audio?.boom(dist, type === 'strobe' || type === 'chrysanthemum');
     const n = type === 'willow' ? 140 : type === 'palm' ? 8 : 220;
     const speed = type === 'willow' ? 10 : 14;
@@ -340,9 +341,9 @@ export class Effects {
       const l = new THREE.Mesh(lampGeo, lampMat);
       l.position.set(Math.cos(a) * 7.4, 0.35, Math.sin(a) * 3.9); g.add(l);
     }
-    const aura = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: new THREE.Color(1.2, 0.7, 0.25), blending: THREE.AdditiveBlending, depthWrite: false }));
-    aura.scale.set(40, 26, 1); aura.position.y = 3; g.add(aura);
-    const light = new THREE.PointLight(0xffc070, 3000, 120, 1.4); light.position.y = -2; g.add(light);
+    const aura = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, color: new THREE.Color(0.45, 0.26, 0.09), blending: THREE.AdditiveBlending, depthWrite: false }));
+    aura.scale.set(30, 20, 1); aura.position.y = 3; g.add(aura);
+    const light = new THREE.PointLight(0xffc070, 500, 70, 1.6); light.position.y = -2; g.add(light);
     g.visible = false;
     g.scale.setScalar(1.8);
     scene.add(g);

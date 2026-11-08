@@ -308,3 +308,36 @@ body.touch .aarti-ico { display: none; }
 .btn.bonus { background: linear-gradient(180deg, #ffe08a, #d4a017); color: #3a1a00; border-color: #fff1b0; }
 body.touch .act#act-khel em { display: none; }
 @media (max-width: 760px) { #actions { width: 172px; } }
+
+/* ---------- Story mode ---------- */
+body.story #hud-punya, body.story #quests, body.story #utsav, body.story #actions, body.story #btn-menu, body.story #boosts { display: none !important; }
+body.story #hud-night { display: none; }
+body.story.story-play #hud-night { display: block; }
+body.story .tab:not([data-tab=settings]) { display: none; }
+body.story #shop-body .section-title:first-child, body.story .shop-punya { display: none; }
+body.cine #hud { display: none; }
+#cine-bars .bar-top, #cine-bars .bar-bot { position: fixed; left: 0; right: 0; height: 0; background: #000; z-index: 25; transition: height 0.8s ease; pointer-events: none; }
+#cine-bars .bar-top { top: 0; } #cine-bars .bar-bot { bottom: 0; }
+body.cine #cine-bars .bar-top, body.cine #cine-bars .bar-bot { height: 11vh; }
+.cine-text { position: fixed; left: 50%; bottom: 13vh; transform: translateX(-50%); z-index: 26; text-align: center; width: min(820px, 92vw); opacity: 0; pointer-events: none; text-shadow: 0 2px 10px #000; }
+.cine-text.show { animation: cinetext 6.5s ease forwards; }
+@keyframes cinetext { 0% { opacity: 0; transform: translate(-50%, 10px); } 12% { opacity: 1; transform: translate(-50%, 0); } 85% { opacity: 1; } 100% { opacity: 0; } }
+.ct-hi { font-family: 'Yatra One', serif; font-size: clamp(24px, 4.2vw, 40px); color: var(--gold); text-shadow: 0 0 20px #ff8a00, 0 2px 0 #4a1500; }
+.ct-en { font-size: clamp(14px, 2vw, 18px); color: #fff1dc; margin-top: 4px; }
+.cine-skip { position: fixed; right: 16px; bottom: calc(11vh + 10px); z-index: 27; display: none; background: rgba(0, 0, 0, 0.5); border: 1px solid var(--panel-border); color: var(--text); padding: 6px 14px; border-radius: 10px; cursor: pointer; font-family: inherit; }
+body.cine .cine-skip { display: block; }
+.chapter-card { position: fixed; inset: 0; z-index: 35; display: flex; flex-direction: column; align-items: center; justify-content: center; background: radial-gradient(circle, rgba(40, 12, 4, 0.85), rgba(0, 0, 0, 0.95)); pointer-events: none; opacity: 0; }
+.chapter-card.show { animation: chcard 3.2s ease forwards; }
+@keyframes chcard { 0% { opacity: 0; } 18% { opacity: 1; } 78% { opacity: 1; } 100% { opacity: 0; } }
+.cc-hi { font-family: 'Yatra One', serif; font-size: clamp(44px, 9vw, 92px); color: var(--gold); text-shadow: 0 0 34px #ff8a00, 0 3px 0 #5a1d00; }
+.cc-en { font-size: clamp(14px, 2.2vw, 20px); letter-spacing: 0.25em; text-transform: uppercase; color: var(--muted); margin-top: 8px; text-align: center; padding: 0 16px; }
+/* storybook */
+#book { position: fixed; inset: 0; z-index: 38; background: #200a03; cursor: pointer; }
+#book-c { position: absolute; inset: 0; width: 100%; height: 100%; }
+.book-text { position: absolute; left: 50%; bottom: 3vh; transform: translateX(-50%); width: min(860px, 90vw); text-align: center; background: rgba(30, 10, 3, 0.72); padding: 12px 18px 10px; border-radius: 16px; border: 1px solid rgba(230, 170, 30, 0.35); }
+.book-hi { font-family: 'Yatra One', serif; font-size: clamp(26px, 4.5vw, 44px); color: #ffe39a; text-shadow: 0 0 18px #ff8a00, 0 2px 0 #3a1000; }
+.book-en { font-size: clamp(14px, 2vw, 18px); color: #fff4e0; line-height: 1.55; min-height: 3.1em; margin-top: 4px; }
+.book-next { font-size: 12px; color: var(--muted); margin-top: 6px; transition: opacity 0.3s; letter-spacing: 0.1em; }
+.book-skip { position: absolute; top: 16px; right: 16px; background: rgba(0, 0, 0, 0.4); border: 1px solid var(--panel-border); color: var(--text); padding: 6px 14px; border-radius: 10px; cursor: pointer; font-family: inherit; }
+.title-buttons #btn-utsav, .title-buttons #btn-dash { font-size: 15px; }
+@media (max-height: 520px) { .book-text { padding-top: 8px; bottom: 2vh; } .book-en { min-height: 0; } }

@@ -11,6 +11,7 @@ import { Effects } from './fx.js';
 import { AudioEngine } from './audio.js';
 import { PowerUps, POWERUPS } from './powerups.js';
 import { MiniGames, GAMES } from './minigames.js';
+import { Storybook, PANELS, CHAPTERS } from './story.js';
 
 const $ = (id) => document.getElementById(id);
 const SAVE_KEY = 'ayodhya-deepotsav-v1';
@@ -73,6 +74,7 @@ const ACHIEVEMENTS = [
   ['yatraWin', '✈️', 'Ayodhya Aagaman', 'Land the Pushpak Vimana in Ayodhya', (s) => (s.mini.yatraWins || 0) >= 1, 2000],
   ['aartiS', '🔔', 'Sur Samrat', 'Get an S grade in the Sarayu Aarti', (s) => (s.mini.aartiS || 0) >= 1, 5000],
   ['rangoli90', '🎨', 'Kalakar', 'Score 90% on a rangoli', (s) => (s.mini.rangoliPct || 0) >= 90, 3000],
+  ['story', '📖', 'Ramayan Sampoorna', 'Complete the story of Shri Ram’s return', (s) => s.story && s.story.done, 10000],
   ['streak5', '🔥', 'Lagataar', 'Win 5 nights in a row', (s) => (s.bestStreak || 0) >= 5, 3000],
   ['streak15', '☄️', 'Ajeya', 'Win 15 nights in a row', (s) => (s.bestStreak || 0) >= 15, 60000],
   ['storm', '⛈️', 'Aandhi Vijay', 'Win a storm night', (s) => (s.storms || 0) >= 1, 5000],
@@ -114,6 +116,7 @@ function freshState() {
     nightStars: {}, playTime: 0, quests: [], questLevel: 0, lastDay: '', streak: 0, lastSave: Date.now(), tutorial: 0,
     settings: { music: 0.6, sfx: 0.9, quality: null, name: '' },
     powerups: 0,
+    story: { chapter: 0, done: false },
     mini: { yatra: 0, aarti: 0, rangoli: 0, yatraWins: 0, aartiS: 0, rangoliPct: 0, day: '', played: {}, aartiNight: 0, yatraNight: 0 },
     dash: { best: 0, played: 0, ladder: 0, wins: 0, runs: [], shared: 0, challengesWon: 0, day: '', dayBest: 0 },
   };
@@ -124,7 +127,7 @@ try {
   if (raw) {
     const loaded = JSON.parse(raw);
     const f = freshState();
-    S = { ...f, ...loaded, up: { ...f.up, ...(loaded.up || {}) }, settings: { ...f.settings, ...(loaded.settings || {}) }, dash: { ...f.dash, ...(loaded.dash || {}) }, mini: { ...f.mini, ...(loaded.mini || {}) } };
+    S = { ...f, ...loaded, up: { ...f.up, ...(loaded.up || {}) }, settings: { ...f.settings, ...(loaded.settings || {}) }, dash: { ...f.dash, ...(loaded.dash || {}) }, mini: { ...f.mini, ...(loaded.mini || {}) }, story: { ...f.story, ...(loaded.story || {}) } };
   }
 } catch (e) { /* storage unavailable */ }
 const hadSave = S.totalLit > 0;
@@ -171,6 +174,7 @@ const monkeys = [new Monkey(scene), new Monkey(scene), new Monkey(scene)];
 const monkey = monkeys[0]; // Deep Dash uses a single vanar
 const powerups = new PowerUps(scene);
 const mini = new MiniGames(audio);
+const book = new Storybook(audio);
 let sevaks = [];
 let frameNo = 0;
 
@@ -233,9 +237,16 @@ function applyStats() {
   diyas.burnTime = 35 + 6 * up().ghee;
   diyas.chainChance = 0.04 * up().agni;
   diyas.setUnlockedZones(S.zones);
+  if (G && G.story) { // story levels are hand-tuned: everyone gets the same stats
+    const c = G.story;
+    player.lightRate = c.rate; player.reach = c.reach; diyas.burnTime = c.burn; diyas.chainChance = 0;
+    diyas.setUnlockedZones(c.zones);
+  }
   syncSevaks();
 }
-function sevakRate() { return 1.2 * (1 + 0.3 * up().sevakTrain); }
+const activeZones = () => (G && G.story ? G.story.zones : S.zones);
+const hazardNight = () => (G.story ? G.story.level : S.night);
+function sevakRate() { return G.story ? 1.4 : 1.2 * (1 + 0.3 * up().sevakTrain); }
 function sevakSpeed() { return 2.6 * (1 + 0.05 * up().sevakTrain); }
 function upgradeCost(u) { return Math.floor(u.base * Math.pow(u.mult, S.up[u.id])); }
 const GROWTH = 1.32;
@@ -252,15 +263,15 @@ function nightDuration(n) {
 }
 const holdTime = (n) => (n <= 3 ? 10 : Math.min(20, 12 + n * 0.4));
 const isStorm = (n) => n % 5 === 0;
-function windChance() { return Math.min(0.85, 0.3 + 0.03 * S.night) * (1 - 0.1 * up().aanchal); }
+function windChance() { return Math.min(0.85, 0.3 + 0.03 * hazardNight()) * (G.story ? 1 : 1 - 0.1 * up().aanchal); }
 const totalStars = () => Object.values(S.nightStars).reduce((a, b) => a + b, 0);
 
 function syncSevaks() {
-  const want = up().sevak;
+  const want = G && G.story ? G.story.sevaks : (G && G.storyIdle ? 0 : up().sevak);
   while (sevaks.length > want) sevaks.pop().dispose(scene);
   while (sevaks.length < want) sevaks.push(new Sevak(scene, world, diyas, 0, sevaks.length));
   sevaks.forEach((s, k) => {
-    const z = k % S.zones;
+    const z = k % activeZones();
     if (s.zone !== z) { s.zone = z; s.placeInZone(); s.target = -1; }
   });
 }
@@ -272,6 +283,7 @@ const G = {
   combo: 0, lastLightT: -10, utsav: 0, utsavT: 0, lakshmiT: 0, floating: 0,
   nextGust: 30, gust: null, nextMonkey: 60, nextGolden: 50, goldenT: 0, goldenPos: null,
   windVec: new THREE.Vector3(), paused: false, photo: false, time: 0,
+  story: null, storyIdle: false, cine: null, waves: [], storyFails: 0,
   cam: { yaw: 0, pitch: 0.42, dist: 9, look: new THREE.Vector3() },
   ambientRocket: 8,
   speedT: 0, magnetT: 0, doubleT: 0, nextPower: 25, sevakCullT: 0,
@@ -431,20 +443,37 @@ function checkAchievements() {
 }
 
 // ---------------------------------------------------------------- nights
-function startNight(n) {
-  S.night = n;
+function startNight(n, cfg = null) {
+  G.story = cfg;
   diyas.resetAll();
   G.phase = 'play';
+  G.nightLit = 0; G.nightPunya = 0; G.combo = 0;
+  G.aarti = 0; G.reached = false; G.dropped = false; G.aartiBell = 0;
+  G.nextGolden = 25 + Math.random() * 40;
+  if (cfg) {
+    applyStats();
+    G.target = Math.round(cfg.target * (1 - 0.07 * Math.min(3, G.storyFails || 0)));
+    G.timeLeft = G.duration = cfg.time;
+    G.hold = cfg.hold;
+    G.storm = !!cfg.storm;
+    G.nextGust = cfg.wind ? (G.storm ? 8 : 18) : 1e9;
+    G.nextMonkey = cfg.monkeys ? 30 : 1e9;
+    sevaks.forEach((s) => { s.target = -1; s.placeInZone(); });
+    player.pos.set(cfg.start[0], world.heightAt(cfg.start[0], cfg.start[1]), cfg.start[1]); player.y = player.pos.y;
+    G.cam.yaw = 0; G.cam.pitch = 0.42;
+    banner(cfg.title, isTouch ? `🎯 Hold ${fmt(G.target)} diyas` : `Keep <b>${fmt(G.target)}</b> diyas burning for ${Math.round(G.hold)} s to call the Aarti`, !!cfg.storm, 4.5, true);
+    audio.bell(660, 0.3); audio.bell(990, 0.2, 0.4);
+    return;
+  }
+  S.night = n;
+  applyStats();
   G.target = nightTarget(n);
   G.timeLeft = nightDuration(n);
   G.duration = G.timeLeft;
-  G.nightLit = 0; G.nightPunya = 0; G.combo = 0;
-  G.aarti = 0; G.reached = false; G.dropped = false; G.aartiBell = 0;
   G.hold = holdTime(n);
   G.storm = isStorm(n);
   G.nextGust = G.storm ? 6 : n >= 2 ? 15 + Math.random() * 12 : 1e9;
   G.nextMonkey = n >= 3 ? 25 + Math.random() * 20 : 1e9;
-  G.nextGolden = 25 + Math.random() * 40;
   sevaks.forEach((s) => { s.target = -1; });
   const m = mercy(n);
   if (G.storm) banner(`⛈️ आंधी रात · Storm Night ${n}`, isTouch ? `🎯 Hold ${fmt(G.target)} · double reward` : `Fierce winds all night. Hold <b>${fmt(G.target)}</b> diyas for the Aarti — double reward!`, true, 5, true);
@@ -453,6 +482,7 @@ function startNight(n) {
   save();
 }
 function winNight() {
+  if (G.story) { storyWin(); return; }
   G.phase = 'won'; G.wonT = 0;
   const frac = G.timeLeft / G.duration;
   G.quick = frac >= 0.25;
@@ -480,6 +510,7 @@ function winNight() {
   save();
 }
 function loseNight() {
+  if (G.story) { storyLose(); return; }
   G.phase = 'lost';
   G.lostStreak = S.winStreak || 0;
   S.winStreak = 0;
@@ -760,12 +791,12 @@ function updateEvents(dt) {
   G.nextGust -= dt;
   if (G.nextGust <= 0 && !G.gust) {
     const dir = Math.random() < 0.5 ? -1 : 1;
-    const zoneK = (Math.random() * S.zones) | 0;
+    const zoneK = (Math.random() * activeZones()) | 0;
     const s = diyas.zoneStart[zoneK], n = diyas.zoneCount[zoneK];
     const i = s + ((Math.random() * n) | 0);
     G.gust = { t: -3, dir, x: diyas.pos[i * 3], z: diyas.pos[i * 3 + 2], done: false };
     banner('🌬️ हवा! A gust of wind is coming', `${dir > 0 ? 'From the west' : 'From the east'} — near ${ZONES[zoneK].name}. Relight quickly!`, true, 3);
-    G.nextGust = G.storm ? 7 + Math.random() * 4 : Math.max(9, (35 + Math.random() * 20) / (1 + S.night * 0.06));
+    G.nextGust = G.storm ? 7 + Math.random() * 4 : Math.max(9, (35 + Math.random() * 20) / (1 + hazardNight() * 0.06));
   }
   if (G.gust) {
     const g = G.gust;
@@ -775,7 +806,7 @@ function updateEvents(dt) {
       audio.wind(4);
       const zmin = g.z < 22 ? 0 : g.z - 25, zmax = g.z < 22 ? 21 : g.z + 25;
       fx.windStreaks(g.x, zmin, zmax, g.dir);
-      const out = diyas.gust(g.x, Math.min(40, 18 + S.night * 0.8) * (G.storm ? 1.3 : 1), zmin, zmax, Math.min(0.9, windChance() * (G.storm ? 1.2 : 1)));
+      const out = diyas.gust(g.x, Math.min(40, 18 + hazardNight() * 0.8) * (G.storm ? 1.3 : 1), zmin, zmax, Math.min(0.9, windChance() * (G.storm ? 1.2 : 1)));
       if (out > 0) setTimeout(() => toast(`🌬️ The wind snuffed out <b>${fmt(out)}</b> diyas`, null), 600);
     }
     const env = g.t > 0 ? Math.max(0, Math.sin(Math.min(1, g.t / 4) * Math.PI)) : Math.max(0, (g.t + 3) / 3) * 0.15;
@@ -787,7 +818,7 @@ function updateEvents(dt) {
   // vanars: more of them, and faster, as the nights go on
   G.nextMonkey -= dt;
   if (G.nextMonkey <= 0 && !monkeys.some((m) => m.active)) {
-    const n = S.night;
+    const n = hazardNight();
     const count = n >= 14 ? 3 : n >= 8 ? 2 : 1;
     let spawned = 0;
     for (let c = 0; c < count; c++) {
@@ -825,7 +856,7 @@ function updateEvents(dt) {
   }
   // golden diya
   G.nextGolden -= dt;
-  if (G.nextGolden <= 0 && !fx.golden.visible) {
+  if (G.nextGolden <= 0 && !fx.golden.visible && !G.story) {
     const i = (Math.random() * diyas.unlockedEnd) | 0;
     let x = diyas.pos[i * 3], z = diyas.pos[i * 3 + 2];
     if (z < 9.6) z = Math.min(9.4, z + 0.3);
@@ -876,11 +907,15 @@ function playMini(id, ctx) {
   ['shop', 'summary'].forEach((x) => $(x).classList.add('hidden'));
   G.paused = true;
   const firstToday = !(S.mini.day === todayKey() && S.mini.played[id]);
+  let lastResult = null;
   mini.open(id, {
     best: S.mini[id] || 0,
+    easy: !!ctx.easy,
     rewardFor: (r) => {
       let punya = 0, text = '';
-      if (id === 'aarti' && ctx.fromSummary) {
+      if (ctx.story) {
+        // no economy inside the story
+      } else if (id === 'aarti' && ctx.fromSummary) {
         punya = Math.round(ctx.nightReward * r.acc);
         text = `+${fmt(punya)} ✦ (Aarti bonus ${Math.round(r.acc * 100)}%)`;
       } else {
@@ -891,6 +926,7 @@ function playMini(id, ctx) {
       return { punya, text };
     },
     onFinish: (r) => {
+      lastResult = r;
       S.punya += r.reward; S.lifetime += r.reward;
       S.mini[id] = Math.max(S.mini[id] || 0, r.score);
       if (S.mini.day !== todayKey()) { S.mini.day = todayKey(); S.mini.played = {}; }
@@ -908,6 +944,7 @@ function playMini(id, ctx) {
       if (summaryOpen) { showSummaryButtonsRefresh(); $('summary').classList.remove('hidden'); }
       G.paused = isModalOpen();
       clock.getDelta();
+      ctx.done?.(lastResult);
     },
   });
 }
@@ -1284,6 +1321,270 @@ function closeAllModals() {
 const _htmlCache = {};
 function setHTML(id, h) { if (_htmlCache[id] !== h) { _htmlCache[id] = h; $(id).innerHTML = h; } }
 
+// ---------------------------------------------------------------- STORY MODE
+const inStory = () => !!G.storyMode;
+const V3 = (a) => new THREE.Vector3(a[0], a[1], a[2]);
+const ease = (u) => u * u * (3 - 2 * u);
+
+// Cinematic camera: a list of shots {from, to, look|lookTo|lookFn, dur, hi, en, onStart}
+function cinema(shots) {
+  return new Promise((resolve) => {
+    G.cine = { shots, i: -1, t: 0, resolve };
+    document.body.classList.add('cine');
+    nextShot();
+  });
+}
+function nextShot() {
+  const c = G.cine;
+  c.i++; c.t = 0;
+  if (c.i >= c.shots.length) { endCine(); return; }
+  const sh = c.shots[c.i];
+  sh.onStart?.();
+  $('cine-hi').textContent = sh.hi || '';
+  $('cine-en').textContent = sh.en || '';
+  const box = $('cine-text');
+  box.classList.remove('show'); void box.offsetWidth;
+  if (sh.hi || sh.en) box.classList.add('show');
+}
+function endCine() {
+  const c = G.cine;
+  if (!c) return;
+  G.cine = null;
+  document.body.classList.remove('cine');
+  $('cine-text').classList.remove('show');
+  c.resolve();
+}
+function skipCine() {
+  const c = G.cine;
+  if (!c) return;
+  for (let k = c.i + 1; k < c.shots.length; k++) c.shots[k].onStart?.(true);
+  c.i = c.shots.length - 1; c.t = 1e9;
+  endCine();
+}
+function updateCine(dt) {
+  const c = G.cine;
+  c.t += dt;
+  if (c.t >= c.shots[c.i].dur) nextShot();
+}
+function cineCamera() {
+  const c = G.cine;
+  const sh = c.shots[Math.min(c.i, c.shots.length - 1)];
+  const u = ease(Math.min(1, c.t / sh.dur));
+  camera.position.lerpVectors(V3(sh.from), V3(sh.to || sh.from), u);
+  let look;
+  if (sh.lookFn) look = sh.lookFn();
+  else look = V3(sh.look).lerp(V3(sh.lookTo || sh.look), u);
+  G.cam.cineLook = (G.cam.cineLook && sh.lookFn ? G.cam.cineLook.lerp(look, 0.08) : look.clone());
+  camera.lookAt(G.cam.cineLook);
+}
+
+// A wave of light that sweeps outward from a point and lights every diya it passes
+function waveLight(x, z, speed, end) {
+  G.waves.push({ x, z, r: 0, speed, end });
+}
+function updateWaves(dt) {
+  const t = G.time;
+  for (let w = G.waves.length - 1; w >= 0; w--) {
+    const wv = G.waves[w];
+    wv.r += wv.speed * dt;
+    const r2 = wv.r * wv.r;
+    let any = false;
+    for (let i = 0; i < wv.end; i++) {
+      if (diyas.lit[i]) continue;
+      const dx = diyas.pos[i * 3] - wv.x, dz = diyas.pos[i * 3 + 2] - wv.z;
+      if (dx * dx + dz * dz < r2) { diyas.lit[i] = 1; diyas.litCount++; diyas.igniteT[i] = t; diyas.oil[i] = 1e6; }
+      else any = true;
+    }
+    if (!any) G.waves.splice(w, 1);
+  }
+}
+function eternalFlames() { for (let i = 0; i < diyas.count; i++) if (diyas.lit[i]) diyas.oil[i] = 1e6; }
+function darkCity() { diyas.resetAll(); G.waves.length = 0; }
+
+// Story levels
+const STORY_NIGHTS = {
+  pehla: { label: 'Chapter 2', title: 'पहला दीप · The First Lamps', zones: 1, target: 70, hold: 10, time: 120, rate: 5, reach: 1.8, burn: 40, sevaks: 0, wind: false, monkeys: false, storm: false, level: 1, start: [0, 7.8] },
+  aandhi: { label: 'Chapter 4', title: '⛈️ आंधी · The Storm', zones: 2, target: 300, hold: 15, time: 150, rate: 7, reach: 2.0, burn: 45, sevaks: 6, wind: true, monkeys: true, storm: true, level: 6, start: [20, 7.8] },
+  aagaman: { label: 'Chapter 5', title: 'आगमन · The Path Home', zones: 4, target: 420, hold: 15, time: 160, rate: 8, reach: 2.1, burn: 50, sevaks: 8, wind: true, monkeys: true, storm: false, level: 8, start: [0, 9] },
+};
+function storyNight(cfg) {
+  return new Promise((resolve) => {
+    G.storyResolve = resolve;
+    G.storyFails = 0;
+    G.paused = false;
+    document.body.classList.add('story-play');
+    startNight(0, cfg);
+  });
+}
+function storyWin() {
+  G.phase = 'storywon';
+  const frac = G.timeLeft / G.duration;
+  const stars = 1 + (frac >= 0.25 ? 1 : 0) + (!G.dropped ? 1 : 0);
+  S.story.stars = S.story.stars || {};
+  S.story.stars[G.story.label] = Math.max(S.story.stars[G.story.label] || 0, stars);
+  G.nextGust = G.nextMonkey = 1e9;
+  monkeys.forEach((m) => { m.active = false; m.mesh.visible = false; });
+  audio.shankh(0); audio.bell(990, 0.3, 0.3);
+  banner(`${'⭐'.repeat(stars)}<span style="opacity:.25">${'⭐'.repeat(3 - stars)}</span>`, stars === 3 ? 'Flawless! Shandaar!' : stars === 2 ? 'Well done!' : 'The Aarti is complete!', false, 3.5, true);
+  for (let k = 0; k < 10; k++) setTimeout(() => fx.launch(-60 + Math.random() * 120, -12 - Math.random() * 30, 0.4), 300 + k * 250);
+  eternalFlames();
+  save();
+  setTimeout(() => {
+    document.body.classList.remove('story-play');
+    G.phase = 'story';
+    const r = G.storyResolve; G.storyResolve = null; G.story = null; G.storyIdle = true;
+    syncSevaks();
+    r && r();
+  }, 3800);
+}
+function storyLose() {
+  G.phase = 'story';
+  G.storyFails++;
+  showMessage(`<div class="sum-title">The flames went out…</div>
+    <p style="text-align:center">The Aarti reached ${Math.round(G.aarti * 100)}%. Sweep the rows, relight dimming diyas before they die, and chase off the vanars.</p>
+    <p style="text-align:center;color:var(--muted)">Try again — the goal is a little easier now.</p>`, () => startNight(0, G.story));
+  $('message-ok').textContent = 'Try again ↻';
+}
+function miniAsync(id, ctx = {}) {
+  return new Promise((resolve) => playMini(id, { ...ctx, story: true, done: resolve }));
+}
+function chapterCard(k) {
+  return new Promise((resolve) => {
+    const ch = CHAPTERS[k];
+    $('chapter-hi').textContent = ch.hindi;
+    $('chapter-en').textContent = ch.title;
+    const el = $('chapter-card');
+    el.classList.remove('hidden', 'show'); void el.offsetWidth; el.classList.add('show');
+    audio.bell(523, 0.25); audio.bell(784, 0.2, 0.25);
+    setTimeout(() => { el.classList.add('hidden'); el.classList.remove('show'); resolve(); }, 3200);
+  });
+}
+
+const CHAPTER_RUN = [
+  // Prologue · The Message
+  async () => {
+    await book.open(PANELS.prologue);
+    darkCity();
+    await cinema([
+      { from: [-170, 46, -130], to: [-70, 24, -45], look: [0, 4, 10], lookTo: [0, 4, 14], dur: 7, hi: 'अमावस्या की रात', en: 'Ayodhya waits in darkness on the moonless night of Amavasya…' },
+      { from: [42, 9, -12], to: [-34, 7, -9], look: [0, 2.5, 6], lookTo: [-12, 2.5, 6], dur: 6, hi: 'राम की पैड़ी', en: 'On the ghats of the Sarayu, thousands of diyas wait for a flame.' },
+      { from: [0, 10, 56], to: [0, 15, 74], look: [0, 16, 120], dur: 6, hi: 'श्री राम जन्मभूमि', en: 'And at the heart of the city, the Ram Mandir waits for its king.' },
+    ]);
+  },
+  // Chapter 1 · Rangoli
+  async () => {
+    darkCity();
+    await cinema([{ from: [7, 9, 26], to: [3, 6.5, 21], look: [0, 3.6, 15.2], dur: 4.5, hi: 'रंगोली', en: 'First, the courtyard at Ram ki Paidi must be made beautiful for the welcome.' }]);
+    await miniAsync('rangoli');
+    waveLight(0, 15.2, 2.5, diyas.zoneEnd[0]);
+    await cinema([{ from: [0, 11, 22], to: [2.5, 5.5, 19.5], look: [0, 3.6, 15.2], dur: 5, hi: 'सुंदर!', en: 'Your rangoli now welcomes every visitor to Ram ki Paidi.' }]);
+    darkCity();
+  },
+  // Chapter 2 · The First Lamps
+  async () => {
+    darkCity();
+    await storyNight(STORY_NIGHTS.pehla);
+    waveLight(player.pos.x, player.pos.z, 9, diyas.zoneEnd[0]);
+    await cinema([
+      { from: [-36, 12, -34], to: [36, 12, -34], look: [0, 2, 5], dur: 7, hi: 'पहले दीप', en: 'The first lamps shine across the Sarayu — and far away, a golden Vimana rises into the sky.',
+        onStart: (skip) => { if (!skip) for (let k = 0; k < 8; k++) setTimeout(() => fx.launch(-50 + Math.random() * 100, -15 - Math.random() * 25, 0.4), k * 600); } },
+    ]);
+  },
+  // Chapter 3 · The Flight Home
+  async () => {
+    await book.open(PANELS.yatra);
+    for (let attempt = 0; ; attempt++) {
+      const r = await miniAsync('yatra', { easy: true });
+      if (r && r.won) break;
+      if (attempt >= 2) { toast('🙏 The Vimana pressed on through the storm…'); break; }
+      await new Promise((res) => showMessage(`<div class="sum-title">Once more!</div><p style="text-align:center">Ayodhya is waiting. Fly through the rings of lamps to keep the Vimana glowing, and stay out of the storm above.</p>`, res));
+    }
+  },
+  // Chapter 4 · The Storm
+  async () => {
+    await book.open(PANELS.storm);
+    darkCity();
+    await storyNight(STORY_NIGHTS.aandhi);
+  },
+  // Chapter 5 · The Return
+  async () => {
+    await book.open(PANELS.arrival);
+    darkCity();
+    await storyNight(STORY_NIGHTS.aagaman);
+    // the whole city lights up from the ghats to the Mandir, then the Vimana arrives
+    diyas.setUnlockedZones(ZONES.length);
+    eternalFlames();
+    await cinema([
+      { from: [0, 30, -70], to: [0, 62, -120], look: [0, 4, 30], lookTo: [0, 10, 60], dur: 8, hi: 'जगमग अयोध्या', en: 'From the ghats to the Mandir, all of Ayodhya bursts into light!',
+        onStart: () => waveLight(0, 5, 22, diyas.count) },
+      { from: [26, 9, -6], to: [-18, 14, 16], lookFn: () => fx.vimana.position.clone(), dur: 15, hi: 'श्री राम पधारे', en: 'The Pushpak Vimana descends upon Ayodhya. Shri Ram, Sita and Lakshman are home!',
+        onStart: (skip) => {
+          if (skip) return;
+          fx.startVimana(16); audio.aarti();
+          fx.petalShower(0, 30, 10, 700, 40);
+          for (let k = 0; k < 36; k++) setTimeout(() => fx.launch(-90 + Math.random() * 180, -10 - Math.random() * 40, 0.4), 1200 + k * 320);
+          for (let k = 0; k < 6; k++) setTimeout(() => fx.anar(-60 + k * 24, TOP_Y, 18.6), 600 + k * 300);
+        } },
+    ]);
+    await miniAsync('aarti');
+    await book.open(PANELS.epilogue);
+    await cinema([{ from: [0, 6, -30], to: [0, 14, -60], look: [0, 24, 10], dur: 10, hi: 'शुभ दीपावली', en: 'Happy Diwali from Ayodhya!',
+      onStart: (skip) => { if (!skip) for (let k = 0; k < 40; k++) setTimeout(() => fx.launch(-100 + Math.random() * 200, -15 - Math.random() * 40, 0.4), k * 220); } }]);
+  },
+];
+
+async function runStory(from = 0) {
+  enterGame();
+  closeAllModals();
+  G.storyMode = true; G.storyIdle = true; G.story = null;
+  document.body.classList.add('story');
+  G.phase = 'story';
+  G.paused = false;
+  monkeys.forEach((m) => { m.active = false; m.mesh.visible = false; });
+  powerups.clear();
+  syncSevaks();
+  diyas.setUnlockedZones(ZONES.length);
+  darkCity();
+  player.pos.set(0, world.heightAt(0, 7.8), 7.8); player.y = player.pos.y;
+  for (let k = from; k < CHAPTER_RUN.length; k++) {
+    S.story.chapter = k; save();
+    await chapterCard(k);
+    await CHAPTER_RUN[k]();
+  }
+  // finished!
+  const first = !S.story.done;
+  S.story.done = true; S.story.chapter = 0;
+  G.storyMode = false; G.storyIdle = false; G.story = null;
+  document.body.classList.remove('story', 'story-play');
+  checkAchievements();
+  save();
+  applyStats();
+  G.phase = 'title';
+  $('hud').classList.add('hidden');
+  refreshTitle();
+  $('title').classList.remove('hidden');
+  if (first) showMessage(`<div class="sum-title">शुभ दीपावली!</div><p style="text-align:center">You have completed the story.<br><b>🪔 Utsav</b> (endless nights with upgrades), <b>⚡ Deep Dash</b> and the <b>🎮 festival games</b> are now unlocked.</p>`);
+}
+const storyUnlocked = () => S.story.done || S.bestNight > 1 || S.totalLit > 400;
+function refreshTitle() {
+  const unlocked = storyUnlocked();
+  const ch = S.story.chapter || 0;
+  const storyLabel = S.story.done ? '📖 Replay the Story' : ch > 0 ? `📖 Continue — ${CHAPTERS[ch].title}` : '📖 Begin the Story';
+  const play = $('btn-play'), alt = $('btn-utsav'), dash = $('btn-dash');
+  if (S.story.done) {
+    play.textContent = `🪔 Utsav — Night ${S.night}`;
+    play.onclick = begin;
+    alt.textContent = storyLabel; alt.onclick = () => runStory(0);
+  } else {
+    play.textContent = storyLabel;
+    play.onclick = () => runStory(ch);
+    alt.textContent = `🪔 Utsav — Night ${S.night}`; alt.onclick = begin;
+  }
+  alt.classList.toggle('hidden', !unlocked);
+  dash.classList.toggle('hidden', !unlocked && !pendingChallenge);
+  $('continue-info').textContent = unlocked && S.totalLit ? `✦ ${fmt(S.punya)} Punya · ${fmt(S.totalLit)} diyas lit` : '';
+}
+
 // ---------------------------------------------------------------- input
 const keys = {};
 const input = { x: 0, z: 0, sprint: false };
@@ -1292,6 +1593,11 @@ addEventListener('keydown', (e) => {
   if (mini.active) return;
   keys[e.code] = true;
   if (G.phase === 'title') return;
+  if (inStory()) {
+    if (e.code === 'Escape') { $('shop').classList.contains('hidden') ? openShop('settings') : closeShop(); }
+    if (e.code === 'KeyP') { G.photo = !G.photo; document.body.classList.toggle('photo', G.photo); }
+    return;
+  }
   if (G.phase === 'dash' || G.phase === 'dashover') {
     if (e.code === 'Escape' && G.phase === 'dash') { G.paused = !G.paused; banner(G.paused ? '⏸ Paused' : '▶', G.paused ? 'Press Esc to continue' : '', false, G.paused ? 999 : 0.6); }
     return;
@@ -1373,7 +1679,7 @@ $('shop').addEventListener('pointerdown', (e) => { if (e.target.id === 'shop') c
 // ---------------------------------------------------------------- HUD update
 let hudT = 0;
 function updateHUD() {
-  $('night-label').textContent = `Night ${S.night}`;
+  $('night-label').textContent = G.story ? G.story.label : `Night ${S.night}`;
   const tEl = $('night-timer');
   tEl.textContent = G.phase === 'play' ? fmtTime(Math.max(0, G.timeLeft)) : G.phase === 'won' || G.phase === 'summary' ? '✓' : '';
   tEl.classList.toggle('urgent', G.phase === 'play' && G.timeLeft < 20);
@@ -1461,6 +1767,7 @@ function updateTutorial(dt) {
 
 // ---------------------------------------------------------------- camera
 function updateCamera(dt) {
+  if (G.cine) { cineCamera(); return; }
   if (keys.KeyQ) G.cam.yaw += dt * 1.8;
   if (keys.KeyE) G.cam.yaw -= dt * 1.8;
   const target = new THREE.Vector3(player.pos.x, player.pos.y + 1.5, player.pos.z);
@@ -1521,7 +1828,9 @@ function frame() {
   const dt = Math.min(0.05, raw);
   G.time += dt;
   const t = G.time;
-  const sim = !G.paused && G.phase !== 'title' && G.phase !== 'dashover';
+  const sim = !G.paused && G.phase !== 'title' && G.phase !== 'dashover' && G.phase !== 'story';
+  if (G.cine) updateCine(dt);
+  if (G.waves.length) updateWaves(dt);
   const dashing = G.phase === 'dash';
 
   // input → player
@@ -1588,7 +1897,7 @@ function frame() {
     if (achT > 1) { achT = 0; checkAchievements(); }
     if (saveT > 10) { saveT = 0; save(); }
   } else {
-    diyas.update(G.phase === 'title' ? dt : 0, t);
+    diyas.update(G.phase === 'title' || G.phase === 'story' ? dt : 0, t);
     if (G.phase === 'title') {
       // keep the title scene glowing with random diyas and festive fireworks
       for (let k = 0; k < 40; k++) {
@@ -1660,7 +1969,7 @@ function begin() {
   save();
 }
 
-$('btn-play').onclick = begin;
+$('cine-skip').onclick = skipCine;
 $('btn-dash').onclick = () => startDash(pendingChallenge);
 $('dash-again').onclick = () => { $('dash-result').classList.add('hidden'); const ch = D.challenge; const snap = D.snap; G.phase = 'play'; startDashKeepSnap(ch, snap); };
 $('dash-back').onclick = () => { const fresh = D.snap.phase === 'fresh'; leaveDash(); if (fresh) dailyAndOffline(); };
@@ -1681,13 +1990,10 @@ addEventListener('beforeunload', () => { if (G.phase !== 'title') save(); });
 
 applyStats();
 diyas.setUnlockedZones(ZONES.length); // title screen: show the whole city glowing
-if (hadSave) {
-  $('btn-play').textContent = `🪔 Continue — Night ${S.night}`;
-  $('continue-info').textContent = `✦ ${fmt(S.punya)} Punya · ${fmt(S.totalLit)} diyas lit · ${up().sevak} sevaks`;
-}
+refreshTitle();
 renderer.compile(scene, camera);
 $('loading').classList.add('hidden');
 $('title').classList.remove('hidden');
 frame();
 // debugging handle (used by automated screenshots)
-window.__deepotsav = { G, D, mini, playMini, get S() { return S; }, player, diyas, fx, camera, begin, world, startDash, powerups };
+window.__deepotsav = { G, D, mini, playMini, book, skipCine, runStory, get S() { return S; }, player, diyas, fx, camera, begin, world, startDash, powerups };

@@ -199,7 +199,8 @@ class Yatra {
   constructor(m) {
     this.m = m; this.a = m.audio;
     this.t = 0;
-    this.dist = 0; this.total = 3000; // world units (1u = H/100 px)
+    this.dist = 0; this.total = m.opts.easy ? 2400 : 3000; // world units (1u = H/100 px)
+    this.drain = m.opts.easy ? 0.024 : 0.03;
     this.y = 50; this.vy = 0; this.hold = false;
     this.lives = 3; this.inv = 0;
     this.score = 0; this.combo = 0; this.rings = 0; this.ringsTotal = 0; this.marigolds = 0;
@@ -280,7 +281,7 @@ class Yatra {
     this.avgY += (this.y - this.avgY) * Math.min(1, dt / 3);
     this.campT = Math.abs(this.y - this.avgY) < 6 ? (this.campT || 0) + dt : Math.max(0, (this.campT || 0) - dt * 2);
     // the light drains; rings and marigolds refill it
-    this.jyoti -= dt * 0.03;
+    this.jyoti -= dt * this.drain;
     if (this.jyoti < 0.25) { this.lowBeep -= dt; if (this.lowBeep <= 0) { this.lowBeep = 0.8; this.a.bell?.(330, 0.12); } }
     if (this.jyoti <= 0) { this.jyoti = 0; this.state = 'crash'; this.dark = true; this.endT = 1.6; this.a.boom?.(40); return; }
     if (this.y > 92) { this.y = 92; this.vy = -25; } // skim the river: a soft bounce, no penalty

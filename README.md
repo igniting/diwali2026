@@ -18,6 +18,21 @@ Everything is made in code: the sandstone, rangoli, water, people, temple and mu
 - **Pushpak Vimana** flies in at the end of each night while the Maha Aarti plays (shankh, bells, dhol) and marigold petals fall.
 - The whole soundscape is synthesised live: tanpura drone, temple bells, river, crowd and crackers.
 
+## 📖 Story mode: दीपोत्सव · The Return
+
+The game begins as a story told in two styles. Scenes from the Ramayana are shown as **shadow-puppet theatre**, with translucent coloured leather puppets backlit by a flickering oil lamp, inspired by tholu bommalata. Moments in Ayodhya are **letterboxed 3D cinematics**.
+
+| Chapter | What happens |
+| --- | --- |
+| Prologue · संदेश | Lanka is won, Hanuman carries the news, Bharat orders every lamp lit. A flyover of dark Ayodhya. |
+| 1 · रंगोली | Decorate Ram ki Paidi with a rangoli (2D), and it appears on the ghat. |
+| 2 · पहला दीप | The first lamps: light the ghat and hold the Aarti (3D). |
+| 3 · पुष्पक यात्रा | Ram, Sita and Lakshman board the Vimana. Fly it home (2D). |
+| 4 · आंधी | A storm hits the Sarayu. Bharat's sevaks help you keep the flames alive (3D). |
+| 5 · आगमन | Light the path to the Mandir, watch the whole city light up in a wave and the Vimana land, then lead the Maha Aarti (2D rhythm). |
+
+During the story there are no menus or shops. Finishing it unlocks **🪔 Utsav** (endless nights with upgrades), **⚡ Deep Dash** and the **🎮 festival games**.
+
 ## How to play
 
 | Key | Action |
