@@ -207,6 +207,7 @@ function setPixelRatioAll(v) {
   fx.setPixelRatio(v);
 }
 function adaptResolution(rawDt) {
+  if (window.__fixedResolution) return; // set by offline capture scripts
   if (rawDt > 0.5) return; // tab was hidden
   perf.frames++; perf.acc += rawDt;
   if (perf.acc < 2) return;
@@ -1822,6 +1823,10 @@ function cullSevaks() {
 function frame() {
   requestAnimationFrame(frame);
   if (mini.active) { clock.getDelta(); return; } // the 3D world sleeps during 2D mini-games
+  if (window.__manualStep) { // offline capture: advance exactly one step when asked
+    if (!window.__stepPending) return;
+    window.__stepPending = false;
+  }
   frameNo++;
   const raw = clock.getDelta();
   adaptResolution(raw);
@@ -1996,4 +2001,4 @@ $('loading').classList.add('hidden');
 $('title').classList.remove('hidden');
 frame();
 // debugging handle (used by automated screenshots)
-window.__deepotsav = { G, D, mini, playMini, book, skipCine, runStory, get S() { return S; }, player, diyas, fx, camera, begin, world, startDash, powerups };
+window.__deepotsav = { G, D, mini, playMini, setPixelRatioAll, book, skipCine, runStory, get S() { return S; }, player, diyas, fx, camera, begin, world, startDash, powerups };
