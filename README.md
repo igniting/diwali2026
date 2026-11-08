@@ -1,5 +1,7 @@
 # 🪔 Ayodhya Deepotsav — a 3D Diwali game
 
+![Ayodhya Deepotsav](share/ayodhya-deepotsav-1080p.jpg)
+
 Shri Ram, Sita and Lakshman are coming home to Ayodhya on the Pushpak Vimana after fourteen years of exile.
 On this moonless Amavasya night it is your seva to light the ghats of the Sarayu, so the Vimana can find its way.
 

@@ -30,7 +30,7 @@ jobs:
       - name: Assemble site
         run: |
           mkdir _site
-          cp -r index.html css js vendor .nojekyll _site/
+          cp -r index.html css js vendor share .nojekyll _site/
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
